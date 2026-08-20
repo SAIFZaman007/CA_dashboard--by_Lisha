@@ -1,0 +1,242 @@
+@import 'tailwindcss';
+
+@import '@fontsource-variable/inter';
+@import '@fontsource/barlow-condensed/600.css';
+@import '@fontsource/barlow-condensed/700.css';
+
+/* ==========================================================================
+   Coach Auto — dashboard tokens
+
+   Same brand as the client portal: black gym floor, red under the bar. The
+   palette is copied verbatim from `frontend/src/index.css` on purpose — two
+   drifting sets of tokens is exactly the cost the project brief warned about.
+
+   What differs is register, not colour. The portal is a place a client visits
+   for ten minutes; this is a console someone works in all afternoon. So the
+   type is a step smaller, numbers are tabular everywhere, and the surfaces sit
+   a shade darker so dense tables do not glow.
+   ========================================================================== */
+@theme {
+  --color-ink-950: #08080a;
+  --color-ink-900: #0b0b0d;
+  --color-ink-850: #101013;
+  --color-ink-800: #141417;
+  --color-ink-700: #1c1c20;
+  --color-ink-600: #26262b;
+  --color-ink-500: #3a3a42;
+
+  --color-brand-400: #f04a55;
+  --color-brand-500: #e5202c;
+  --color-brand-600: #c4141f;
+  --color-brand-700: #9c0f18;
+
+  --color-chalk-50: #ffffff;
+  --color-chalk-200: #d6d6dc;
+  --color-chalk-400: #9a9aa4;
+  --color-chalk-500: #74747e;
+
+  --color-signal-green: #22c55e;
+  --color-signal-blue: #3b82f6;
+  --color-signal-amber: #f59e0b;
+
+  --font-display: 'Barlow Condensed', 'Arial Narrow', sans-serif;
+  --font-sans: 'Inter Variable', system-ui, -apple-system, sans-serif;
+
+  --radius-card: 0.75rem;
+}
+
+@layer base {
+  * {
+    border-color: var(--color-ink-600);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--color-ink-950);
+    color: var(--color-chalk-50);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.01em;
+    line-height: 0.95;
+  }
+
+  /* Every figure on this screen is compared against the one above it, so
+     digits must occupy the same width in every row. */
+  td,
+  th,
+  input[type='number'],
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-brand-500);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  ::selection {
+    background: var(--color-brand-500);
+    color: white;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-ink-600) transparent;
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-ink-600);
+    border-radius: 8px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-ink-500);
+  }
+
+  input[type='number']::-webkit-outer-spin-button,
+  input[type='number']::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type='number'] {
+    -moz-appearance: textfield;
+  }
+
+  /* The date picker's icon is invisible on a dark field without this. */
+  input[type='date']::-webkit-calendar-picker-indicator,
+  input[type='time']::-webkit-calendar-picker-indicator {
+    filter: invert(0.7);
+    cursor: pointer;
+  }
+}
+
+@layer utilities {
+  .eyebrow {
+    font-family: var(--font-display);
+    text-transform: uppercase;
+    letter-spacing: 0.22em;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    color: var(--color-chalk-500);
+  }
+
+  .card {
+    background-color: var(--color-ink-850);
+    border: 1px solid var(--color-ink-600);
+    border-radius: var(--radius-card);
+  }
+
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      var(--color-ink-850) 25%,
+      var(--color-ink-700) 50%,
+      var(--color-ink-850) 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.4s ease-in-out infinite;
+  }
+
+  @keyframes shimmer {
+    0% {
+      background-position: 200% 0;
+    }
+    100% {
+      background-position: -200% 0;
+    }
+  }
+
+  .scrollbar-none {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* ==========================================================================
+   The status rail
+
+   The one piece of ornament in this build, and it earns its place by carrying
+   information: a 3px bar down the left edge of a client row, coloured by how
+   long since that person last checked in. Green is current, amber is slipping,
+   red needs a message today, grey has never logged anything.
+
+   The coach scans forty rows looking for the four that need them. Colour does
+   that faster than a date column can — and because it is a border rather than
+   a background, it survives hover, selection and print without fighting them.
+
+   Colour is never the only signal: each row also carries a text label, so this
+   still reads correctly to someone who cannot distinguish the hues.
+   ========================================================================== */
+@layer components {
+  .rail {
+    border-left: 3px solid var(--color-ink-600);
+  }
+  .rail-current {
+    border-left-color: var(--color-signal-green);
+  }
+  .rail-slipping {
+    border-left-color: var(--color-signal-amber);
+  }
+  .rail-stale {
+    border-left-color: var(--color-brand-500);
+  }
+  .rail-none {
+    border-left-color: var(--color-ink-500);
+  }
+
+  /* Sidebar navigation */
+  .side-link {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    border-radius: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--color-chalk-400);
+    transition:
+      color 160ms ease,
+      background-color 160ms ease;
+  }
+
+  .side-link:hover {
+    background-color: var(--color-ink-800);
+    color: var(--color-chalk-50);
+  }
+
+  .side-link[aria-current='page'] {
+    background-color: color-mix(in srgb, var(--color-brand-500) 12%, transparent);
+    color: var(--color-brand-500);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

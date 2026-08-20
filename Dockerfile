@@ -20,8 +20,8 @@ COPY . .
 # Vite inlines VITE_* at build time, so these are ARGs, not runtime env.
 # On Coolify set them under "Build Variables".
 ARG VITE_API_URL=""
-ARG VITE_DASHBOARD_URL=""
-ARG VITE_PORTAL_URL=""
+ARG VITE_DASHBOARD_URL="https://coach.autonomyfitness.press"
+ARG VITE_PORTAL_URL="https://autonomyfitness.press"
 ARG VITE_ENVIRONMENT="production"
 ENV VITE_API_URL=$VITE_API_URL \
     VITE_DASHBOARD_URL=$VITE_DASHBOARD_URL \

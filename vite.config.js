@@ -9,6 +9,7 @@ export default defineConfig({
     alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
   },
   server: {
+    // 5174 so the dashboard and the client portal can run side by side.
     port: 5174,
     proxy: {
       '/api': { target: 'http://localhost:8000', changeOrigin: true },
