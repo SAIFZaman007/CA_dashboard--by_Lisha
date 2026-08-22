@@ -15,12 +15,36 @@ import { cn } from '@/lib/utils'
 
 const LOCKUP = '/images/logo-lockup-light.png'
 const MARK = '/images/logo-mark-light.png'
+// The full brand artwork — figures, wordmark and strapline stacked. Too tall
+// for a 60px sidebar, but it is the right mark for the sign-in screen, where
+// there is room for it and it is the only thing on the page.
+const FULL = '/images/logo-coach-auto-light.png'
 const ALT = 'Coach Auto — Autonomy Health and Fitness'
 
-export function Logo({ size = 'md', markOnly = false, to = '/', className }) {
-  const height = { sm: 'h-6', md: 'h-8', lg: 'h-11' }[size]
+export function Logo({ size = 'md', variant = 'lockup', to = '/', className }) {
+  const height = {
+    sm: 'h-6',
+    md: 'h-8',
+    lg: 'h-11',
+    // `full` is 1.75:1 rather than 5.8:1, so it is sized by its own scale —
+    // reusing the lockup heights would render it postage-stamp small.
+    hero: 'h-28 sm:h-32',
+  }[size]
 
-  const image = markOnly ? (
+  const markOnly = variant === 'mark'
+  const full = variant === 'full'
+
+  const image = full ? (
+    <img
+      src={FULL}
+      alt={ALT}
+      width="900"
+      height="515"
+      className={cn('w-auto object-contain', height)}
+      loading="eager"
+      decoding="async"
+    />
+  ) : markOnly ? (
     <img
       src={MARK}
       alt={ALT}

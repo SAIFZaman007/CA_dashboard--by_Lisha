@@ -26,6 +26,13 @@ export function ThreadView({ clientId, className }) {
     queryKey: keys.thread(clientId),
     queryFn: () => api.inbox.thread(clientId),
     enabled: Boolean(clientId),
+    // An open conversation should feel live. Eight seconds is fast enough that
+    // a reply lands while the coach is still looking at the thread, and cheap
+    // enough that it is one small request per client being actively read.
+    refetchInterval: 8_000,
+    // Not while the tab is hidden — a dashboard left open overnight should not
+    // spend the night polling.
+    refetchIntervalInBackground: false,
   })
 
   const send = useMutation({

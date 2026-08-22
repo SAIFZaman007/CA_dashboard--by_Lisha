@@ -141,16 +141,28 @@ function AccountCard() {
 export function AdminLayout() {
   const [menuOpen, setMenuOpen] = useState(false)
 
-  // One poll drives every badge in the sidebar. Six separate polls would put
-  // six requests a minute on the API for numbers that change hourly.
+  // Two polls, at the two speeds the numbers actually change.
+  //
+  // Leads and bookings move a few times a day, so they ride along with the
+  // overview payload on a slow interval. An unread message is the one thing a
+  // coach wants to see arrive, so it gets its own endpoint — a bare count, no
+  // aggregation — polled fast enough to feel immediate.
   const { data: overview } = useQuery({
     queryKey: keys.overview(30),
     queryFn: () => api.overview(30),
     refetchInterval: 120_000,
+    refetchIntervalInBackground: false,
+  })
+
+  const { data: inbox } = useQuery({
+    queryKey: ['inbox', 'unread'],
+    queryFn: api.inbox.unreadCount,
+    refetchInterval: 10_000,
+    refetchIntervalInBackground: false,
   })
 
   const counts = {
-    unread: overview?.counts?.unread_messages ?? 0,
+    unread: inbox?.unread ?? overview?.counts?.unread_messages ?? 0,
     leads: overview?.counts?.new_leads ?? 0,
     bookings: overview?.counts?.pending_bookings ?? 0,
   }

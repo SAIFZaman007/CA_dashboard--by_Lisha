@@ -10,6 +10,7 @@ import { Button, IconButton } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Badge, EmptyState, ErrorState, Skeleton } from '@/components/ui/Feedback'
 import { Input, ListInput, Select, Switch, Textarea } from '@/components/ui/Field'
+import { UploadDropzone } from '@/components/ui/UploadDropzone'
 import { ConfirmDialog, Modal } from '@/components/ui/Modal'
 import { toast } from '@/components/ui/Toast'
 
@@ -27,6 +28,8 @@ const BLANK = {
   is_published: true,
   is_featured: false,
   sort_order: 0,
+  file_key: null,
+  file_name: null,
 }
 
 const EQUIPMENT = [
@@ -123,7 +126,9 @@ function TutorialForm({ open, tutorial, onClose }) {
     setError(null)
     save.mutate({
       title: form.title,
-      video_url: form.video_url,
+      // Send whichever source is set; the API rejects a tutorial with neither.
+      video_url: form.video_url?.trim() || null,
+      file_key: form.file_key || null,
       summary: form.summary || null,
       description: form.description || null,
       category: form.category,
@@ -157,16 +162,55 @@ function TutorialForm({ open, tutorial, onClose }) {
       }
     >
       <div className="space-y-4">
-        <Input
-          label="Video link"
-          required
-          value={form.video_url}
-          onChange={set('video_url')}
-          placeholder="https://www.youtube.com/watch?v=…"
-          hint="YouTube, Vimeo or a direct MP4. Nothing is uploaded — the video stays where it is hosted."
-        />
+        {/* Upload or link — one tutorial needs one of the two, not both.
+            Uploading is the default because that is what the coach does with a
+            phone recording; linking stays available for anything already on
+            YouTube, where the hosting and bandwidth are somebody else's. */}
+        <div>
+          <p className="mb-1.5 font-display text-[11px] font-semibold uppercase tracking-widest text-chalk-400">
+            Video <span className="text-brand-500">*</span>
+          </p>
+          <UploadDropzone
+            kind="video"
+            accept="video/mp4,video/quicktime,video/webm"
+            endpoint="/admin/tutorials/upload"
+            label="Drag a video here"
+            hint="MP4, MOV or WebM"
+            maxMb={512}
+            value={
+              form.file_key
+                ? { name: form.file_name ?? 'Uploaded video', detail: 'Hosted by Coach Auto' }
+                : null
+            }
+            disabled={Boolean(form.video_url?.trim())}
+            onUploaded={(data, file) =>
+              setForm((f) => ({ ...f, file_key: data.file_key, file_name: file.name }))
+            }
+            onCleared={() => setForm((f) => ({ ...f, file_key: null, file_name: null }))}
+          />
+        </div>
 
-        <Preview url={form.video_url} />
+        {!form.file_key && (
+          <>
+            <div className="flex items-center gap-3">
+              <span className="h-px flex-1 bg-ink-600" />
+              <span className="text-[11px] uppercase tracking-widest text-chalk-500">
+                or paste a link
+              </span>
+              <span className="h-px flex-1 bg-ink-600" />
+            </div>
+
+            <Input
+              label="Video link"
+              value={form.video_url}
+              onChange={set('video_url')}
+              placeholder="https://www.youtube.com/watch?v=…"
+              hint="YouTube, Vimeo or a direct MP4. Nothing is uploaded — the video stays where it is hosted."
+            />
+
+            <Preview url={form.video_url} />
+          </>
+        )}
 
         <Input label="Title" required value={form.title} onChange={set('title')} />
 

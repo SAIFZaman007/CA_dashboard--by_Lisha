@@ -25,7 +25,8 @@ export default function MessagesPage() {
   const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: keys.threads(params),
     queryFn: () => api.inbox.threads(params),
-    refetchInterval: 60_000,
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
   })
 
   const active = selected ?? data?.[0] ?? null

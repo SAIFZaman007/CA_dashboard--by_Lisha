@@ -133,6 +133,8 @@ export const api = {
     update: (id, body) => patch(`/admin/tutorials/${id}`, body),
     remove: (id) => del(`/admin/tutorials/${id}`),
     reorder: (ids) => post('/admin/tutorials/reorder', ids),
+    // Video bytes go up on their own request; see UploadDropzone for why.
+    uploadEndpoint: '/admin/tutorials/upload',
   },
 
   // The exercise library is shared with the client portal, so these are the
@@ -147,6 +149,7 @@ export const api = {
 
   inbox: {
     threads: (params) => get('/admin/threads', params),
+    unreadCount: () => get('/admin/unread-count'),
     thread: (clientId) => get(`/admin/clients/${clientId}/thread`),
     reply: (clientId, body) => post(`/admin/clients/${clientId}/thread`, body),
     leads: (params) => get('/admin/leads', params),

@@ -5,12 +5,12 @@ import { Archive, Check, GripVertical, Pencil, Plus, Tags, Trash2 } from 'lucide
 import { api, errorMessage } from '@/lib/api'
 import { keys } from '@/lib/queryClient'
 import { cn, formatMoney, LEVEL_LABELS } from '@/lib/utils'
-import { useIsAdmin } from '@/store/auth'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Button, IconButton } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Badge, EmptyState, ErrorState, Skeleton } from '@/components/ui/Feedback'
 import { Input, ListInput, Select, Switch, Textarea } from '@/components/ui/Field'
+import { UploadDropzone } from '@/components/ui/UploadDropzone'
 import { ConfirmDialog, Modal } from '@/components/ui/Modal'
 import { toast } from '@/components/ui/Toast'
 
@@ -66,6 +66,7 @@ function PlanForm({ open, plan, onClose }) {
       description: form.description,
       features: (form.features ?? []).map((f) => f.trim()).filter(Boolean),
       best_for: form.best_for || null,
+      image_external_url: form.image_external_url || null,
       is_active: form.is_active,
       is_accepting_clients: form.is_accepting_clients,
       sort_order: Number(form.sort_order ?? 0),
@@ -171,6 +172,59 @@ function PlanForm({ open, plan, onClose }) {
           hint="Optional. e.g. Anyone training three times a week around a full-time job."
         />
 
+        {/* Artwork. Only offered on an existing plan: the upload endpoint needs
+            a plan id to attach the file to, and inventing one before the plan
+            is saved would orphan the image if the coach cancelled. */}
+        <div>
+          <p className="mb-1.5 font-display text-[11px] font-semibold uppercase tracking-widest text-chalk-400">
+            Hero image
+          </p>
+
+          {editing ? (
+            <>
+              {form.image_url && (
+                <img
+                  src={form.image_url}
+                  alt=""
+                  className="mb-2 aspect-video w-full rounded-lg border border-ink-600 object-cover"
+                />
+              )}
+              <UploadDropzone
+                kind="image"
+                accept="image/jpeg,image/png,image/webp"
+                endpoint={`/admin/programs/${plan.id}/image`}
+                label="Drag a photo here"
+                hint="JPEG, PNG or WebP"
+                maxMb={8}
+                onUploaded={(data) =>
+                  setForm((f) => ({
+                    ...f,
+                    // Cache-bust: the URL is stable per plan, so without this
+                    // the browser keeps showing the picture just replaced.
+                    image_url: `${data.image_url}?v=${Date.now()}`,
+                    image_external_url: '',
+                  }))
+                }
+              />
+              <p className="mt-2 text-xs text-chalk-500">
+                Shown beside the level on the public pricing page.
+              </p>
+            </>
+          ) : (
+            <p className="rounded-lg border border-dashed border-ink-600 px-4 py-3 text-xs text-chalk-500">
+              Save the plan first, then reopen it to add artwork.
+            </p>
+          )}
+        </div>
+
+        <Input
+          label="…or an image URL"
+          value={form.image_external_url ?? ''}
+          onChange={set('image_external_url')}
+          placeholder="https://…"
+          hint="Use this instead if the photo already lives somewhere else."
+        />
+
         <div className="space-y-3 rounded-lg border border-ink-600 bg-ink-900 p-4">
           <Switch
             label="Listed publicly"
@@ -196,7 +250,7 @@ function PlanForm({ open, plan, onClose }) {
   )
 }
 
-function PlanCard({ plan, onEdit, onArchive, onDelete, canManage }) {
+function PlanCard({ plan, onEdit, onArchive, onDelete }) {
   return (
     <Card
       className={cn(
@@ -204,6 +258,15 @@ function PlanCard({ plan, onEdit, onArchive, onDelete, canManage }) {
         !plan.is_active && 'opacity-60',
       )}
     >
+      {plan.image_url && (
+        <img
+          src={plan.image_url}
+          alt=""
+          loading="lazy"
+          className="mb-4 aspect-video w-full rounded-lg border border-ink-600 object-cover"
+        />
+      )}
+
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-1.5">
@@ -212,8 +275,7 @@ function PlanCard({ plan, onEdit, onArchive, onDelete, canManage }) {
           </div>
           <p className="mt-1 text-sm text-chalk-400">{plan.tagline}</p>
         </div>
-        {canManage && (
-          <div className="flex shrink-0 gap-1">
+        <div className="flex shrink-0 gap-1">
             <IconButton label="Edit plan" icon={Pencil} onClick={() => onEdit(plan)} />
             <IconButton
               label={plan.is_active ? 'Archive plan' : 'Restore plan'}
@@ -221,8 +283,7 @@ function PlanCard({ plan, onEdit, onArchive, onDelete, canManage }) {
               onClick={() => onArchive(plan)}
             />
             <IconButton label="Delete plan" icon={Trash2} onClick={() => onDelete(plan)} />
-          </div>
-        )}
+        </div>
       </div>
 
       <p className="mt-4 font-display text-3xl font-bold tabular-nums text-white">
@@ -266,7 +327,6 @@ function PlanCard({ plan, onEdit, onArchive, onDelete, canManage }) {
 
 export default function PlansPage() {
   const queryClient = useQueryClient()
-  const isAdmin = useIsAdmin()
 
   const [editing, setEditing] = useState(null) // plan | 'new' | null
   const [removing, setRemoving] = useState(null)
@@ -307,12 +367,10 @@ export default function PlansPage() {
         title="Pricing Plans"
         description="Add, edit and retire the coaching tiers shown on the public site."
         action={
-          isAdmin && (
-            <Button size="sm" onClick={() => setEditing('new')}>
-              <Plus className="size-4" aria-hidden="true" />
-              New plan
-            </Button>
-          )
+          <Button size="sm" onClick={() => setEditing('new')}>
+            <Plus className="size-4" aria-hidden="true" />
+            New plan
+          </Button>
         }
       />
 
@@ -332,7 +390,6 @@ export default function PlansPage() {
             <PlanCard
               key={plan.id}
               plan={plan}
-              canManage={isAdmin}
               onEdit={setEditing}
               onArchive={(target) => archive.mutate(target)}
               onDelete={(target) => {
@@ -349,21 +406,14 @@ export default function PlansPage() {
             title="No pricing plans yet"
             description="Create the tiers you sell — Level 1, Level 2 and so on. These appear on the public pricing page immediately."
             action={
-              isAdmin ? (
-                <Button size="sm" onClick={() => setEditing('new')}>
-                  Create the first plan
-                </Button>
-              ) : null
+              <Button size="sm" onClick={() => setEditing('new')}>
+                Create the first plan
+              </Button>
             }
           />
         </Card>
       )}
 
-      {!isAdmin && data?.length > 0 && (
-        <p className="mt-4 text-xs text-chalk-500">
-          Pricing is admin-only. Ask an admin to change a plan.
-        </p>
-      )}
 
       {editing && (
         <PlanForm
