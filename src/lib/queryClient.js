@@ -30,6 +30,11 @@ export const keys = {
   programs: ['programs'],
   tutorials: (params) => ['tutorials', params],
   exercises: (params) => ['exercises', params],
+  // Facet counts change only when the library does, so this is its own key
+  // rather than riding along with a filtered list — one fetch feeds every
+  // picker on the screen.
+  exerciseFilters: ['exercises', 'filters'],
+  gallery: (params) => ['gallery', params],
   threads: (params) => ['threads', params],
   thread: (clientId) => ['thread', clientId],
   leads: (params) => ['leads', params],

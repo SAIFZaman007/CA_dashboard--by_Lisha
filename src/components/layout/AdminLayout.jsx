@@ -3,7 +3,9 @@ import { NavLink, Outlet } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import {
   CalendarClock,
+  Dumbbell,
   ExternalLink,
+  Images,
   LayoutDashboard,
   Menu,
   MessageSquare,
@@ -50,7 +52,10 @@ const SECTIONS = [
     heading: 'Content',
     items: [
       { to: '/tutorials', label: 'Video Tutorials', icon: PlayCircle },
-      { to: '/exercises', label: 'Exercise Library', icon: Tags },
+      { to: '/exercises', label: 'Exercise Library', icon: Dumbbell },
+      // Public marketing imagery, so it sits with the other content the coach
+      // publishes rather than with client records.
+      { to: '/gallery', label: 'Gallery', icon: Images },
     ],
   },
   {

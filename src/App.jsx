@@ -15,6 +15,7 @@ const LeadsPage = lazy(() => import('@/pages/LeadsPage'))
 const BookingsPage = lazy(() => import('@/pages/BookingsPage'))
 const TutorialsPage = lazy(() => import('@/pages/TutorialsPage'))
 const ExercisesPage = lazy(() => import('@/pages/ExercisesPage'))
+const GalleryPage = lazy(() => import('@/pages/GalleryPage'))
 const PlansPage = lazy(() => import('@/pages/PlansPage'))
 const NotFound = lazy(() => import('@/pages/NotFound'))
 
@@ -81,6 +82,7 @@ export default function App() {
             <Route path="bookings" element={<BookingsPage />} />
             <Route path="tutorials" element={<TutorialsPage />} />
             <Route path="exercises" element={<ExercisesPage />} />
+            <Route path="gallery" element={<GalleryPage />} />
             <Route path="plans" element={<PlansPage />} />
             <Route path="*" element={<NotFound />} />
           </Route>

@@ -1,14 +1,96 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { MessageSquare, Send } from 'lucide-react'
+import { MessageSquare, Send, X } from 'lucide-react'
 
 import { api, errorMessage } from '@/lib/api'
 import { keys } from '@/lib/queryClient'
 import { cn, formatDateTime } from '@/lib/utils'
 import { Button } from '@/components/ui/Button'
-import { Card, CardBody } from '@/components/ui/Card'
+import { Card } from '@/components/ui/Card'
 import { EmptyState, ErrorState, Skeleton } from '@/components/ui/Feedback'
 import { toast } from '@/components/ui/Toast'
+
+/**
+ * Full-size view of one attached photo.
+ *
+ * Worth the extra component because the thumbnails in the thread are 160px
+ * tall, and the whole point of a client photographing their setup is that the
+ * coach can see the detail — a knee tracking in, a grip width, a bar path.
+ */
+function Lightbox({ attachment, onClose }) {
+  useEffect(() => {
+    function onKey(event) {
+      if (event.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', onKey)
+    // Stop the thread scrolling behind the open image.
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.body.style.overflow = ''
+    }
+  }, [onClose])
+
+  if (!attachment) return null
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Attached photo"
+      className="fixed inset-0 z-60 flex items-center justify-center bg-black/90 p-4"
+      onClick={onClose}
+    >
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label="Close photo"
+        className="absolute right-4 top-4 rounded-lg border border-white/20 p-2 text-white transition hover:bg-white/10"
+      >
+        <X className="size-5" />
+      </button>
+      <img
+        src={attachment.url}
+        alt={attachment.original_name || 'Photo sent by the client'}
+        className="max-h-[88dvh] max-w-full rounded-lg object-contain"
+        onClick={(event) => event.stopPropagation()}
+      />
+    </div>
+  )
+}
+
+function Attachments({ attachments, onOpen }) {
+  if (!attachments?.length) return null
+
+  return (
+    <div
+      className={cn(
+        'mt-2 grid gap-1.5',
+        attachments.length === 1 ? 'grid-cols-1' : 'grid-cols-2',
+      )}
+    >
+      {attachments.map((attachment) => (
+        <button
+          key={attachment.id}
+          type="button"
+          onClick={() => onOpen(attachment)}
+          className="overflow-hidden rounded-md border border-ink-600 bg-ink-900 transition hover:border-brand-500"
+        >
+          <img
+            src={attachment.url}
+            alt={attachment.original_name || 'Photo sent by the client'}
+            // Reserving the box stops the thread jumping as each image lands,
+            // which is especially unpleasant mid-scroll through a long history.
+            width={attachment.width ?? undefined}
+            height={attachment.height ?? undefined}
+            loading="lazy"
+            className="max-h-40 w-full object-cover"
+          />
+        </button>
+      ))}
+    </div>
+  )
+}
 
 /**
  * One conversation with one client.
@@ -16,10 +98,16 @@ import { toast } from '@/components/ui/Toast'
  * Opening this marks the client's messages as read server-side — that is what
  * the unread badge in the sidebar counts, and it should not need a second
  * click to clear. The sidebar count is invalidated on load for that reason.
+ *
+ * Attachment URLs arrive already signed and are short-lived by design, which
+ * is why the poll below matters for more than new messages: a thread left open
+ * past the token's life refetches and picks up fresh URLs before the images
+ * would otherwise start 404ing.
  */
 export function ThreadView({ clientId, className }) {
   const queryClient = useQueryClient()
   const [draft, setDraft] = useState('')
+  const [lightbox, setLightbox] = useState(null)
   const endRef = useRef(null)
 
   const { data, isPending, isError, error, refetch } = useQuery({
@@ -94,7 +182,14 @@ export function ThreadView({ clientId, className }) {
                       : 'border border-ink-600 bg-ink-800 text-chalk-100',
                   )}
                 >
-                  <p className="whitespace-pre-line text-sm leading-relaxed">{message.body}</p>
+                  {/* An image on its own is a complete message, so the text
+                      block is skipped rather than rendering an empty line. */}
+                  {message.body && (
+                    <p className="whitespace-pre-line text-sm leading-relaxed">{message.body}</p>
+                  )}
+
+                  <Attachments attachments={message.attachments} onOpen={setLightbox} />
+
                   <p
                     className={cn(
                       'mt-1.5 text-[11px]',
@@ -136,6 +231,8 @@ export function ThreadView({ clientId, className }) {
           Send
         </Button>
       </form>
+
+      <Lightbox attachment={lightbox} onClose={() => setLightbox(null)} />
     </div>
   )
 }
