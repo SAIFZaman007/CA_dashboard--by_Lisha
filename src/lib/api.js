@@ -44,7 +44,11 @@ http.interceptors.response.use(
     if (status === 401 && !original?._retried && !isAuthRoute) {
       original._retried = true
       try {
-        refreshPromise ??= http.post('/auth/refresh').finally(() => {
+        // `audience=staff` tells the API which of the two isolated session
+        // cookies to read — this app's, not the client portal's. See
+        // REFRESH_COOKIE_NAMES in the backend's auth endpoint for why the two
+        // apps no longer share one cookie slot.
+        refreshPromise ??= http.post('/auth/refresh?audience=staff').finally(() => {
           refreshPromise = null
         })
         const { data } = await refreshPromise
@@ -80,7 +84,7 @@ const del = (url, params) => http.delete(url, { params }).then((r) => r.data)
 export const api = {
   auth: {
     login: (body) => post('/auth/login', body),
-    refresh: () => post('/auth/refresh'),
+    refresh: () => post('/auth/refresh?audience=staff'),
     logout: () => post('/auth/logout'),
     me: () => get('/auth/me'),
     changePassword: (body) => post('/auth/change-password', body),
@@ -189,6 +193,28 @@ export const api = {
     unreadCount: () => get('/admin/unread-count'),
     thread: (clientId) => get(`/admin/clients/${clientId}/thread`),
     reply: (clientId, body) => post(`/admin/clients/${clientId}/thread`, body),
+    // Same upload endpoint the client portal uses (`POST /messages/attachments`
+    // — outside the `/admin` prefix on purpose, since the image itself is
+    // stored identically for either side of a conversation; only which thread
+    // it lands in differs, and that is resolved when the reply is sent). Bytes
+    // go up before the reply that references them exists, same reasoning as
+    // the client composer: a slow upload should not block the text box.
+    uploadAttachment: (file, onProgress) => {
+      const body = new FormData()
+      body.append('file', file)
+      return http
+        .post('/messages/attachments', body, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+          timeout: 120000,
+          onUploadProgress: (event) => {
+            if (onProgress && event.total) {
+              onProgress(Math.round((event.loaded * 100) / event.total))
+            }
+          },
+        })
+        .then((r) => r.data)
+    },
+    discardAttachment: (id) => del(`/messages/attachments/${id}`),
     leads: (params) => get('/admin/leads', params),
     updateLead: (id, body) => patch(`/admin/leads/${id}`, body),
     removeLead: (id) => del(`/admin/leads/${id}`),

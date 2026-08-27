@@ -1,14 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { MessageSquare, Send, X } from 'lucide-react'
+import { ImagePlus, MessageSquare, Send, X } from 'lucide-react'
 
 import { api, errorMessage } from '@/lib/api'
 import { keys } from '@/lib/queryClient'
 import { cn, formatDateTime } from '@/lib/utils'
-import { Button } from '@/components/ui/Button'
+import { Button, IconButton } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { EmptyState, ErrorState, Skeleton } from '@/components/ui/Feedback'
 import { toast } from '@/components/ui/Toast'
+
+const MAX_ATTACHMENTS = 6
+const MAX_MB = 6
 
 /**
  * Full-size view of one attached photo.
@@ -93,6 +96,48 @@ function Attachments({ attachments, onOpen }) {
 }
 
 /**
+ * The composer's pending strip — images uploaded but not yet sent.
+ *
+ * Previews come from `URL.createObjectURL` on the local File rather than a
+ * round trip to the server: the bytes are already in the browser, so
+ * fetching them back would only add latency at the one moment the coach is
+ * waiting to hit send.
+ */
+function PendingStrip({ pending, onRemove }) {
+  if (!pending.length) return null
+
+  return (
+    <div className="flex flex-wrap gap-2 border-t border-ink-600 px-3 pt-3">
+      {pending.map((item) => (
+        <div key={item.localId} className="relative">
+          <img
+            src={item.previewUrl}
+            alt=""
+            className={cn(
+              'size-14 rounded-md object-cover',
+              item.status === 'uploading' && 'opacity-40',
+            )}
+          />
+          {item.status === 'uploading' && (
+            <span className="absolute inset-0 grid place-items-center text-[10px] font-bold text-white">
+              {item.progress}%
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={() => onRemove(item)}
+            aria-label="Remove image"
+            className="absolute -right-1.5 -top-1.5 grid size-5 place-items-center rounded-full bg-ink-950 text-chalk-300 ring-1 ring-ink-600 transition hover:text-white"
+          >
+            <X className="size-3" />
+          </button>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/**
  * One conversation with one client.
  *
  * Opening this marks the client's messages as read server-side — that is what
@@ -109,6 +154,13 @@ export function ThreadView({ clientId, className }) {
   const [draft, setDraft] = useState('')
   const [lightbox, setLightbox] = useState(null)
   const endRef = useRef(null)
+  const fileRef = useRef(null)
+
+  // Pending attachments: uploaded to the server but not yet attached to a
+  // reply. Each carries a local preview URL so the strip renders instantly
+  // and the server id so send can claim it — same pattern as the client
+  // portal's composer in `frontend/src/pages/portal/MessagesPage.jsx`.
+  const [pending, setPending] = useState([])
 
   const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: keys.thread(clientId),
@@ -123,6 +175,62 @@ export function ThreadView({ clientId, className }) {
     refetchIntervalInBackground: false,
   })
 
+  // Object URLs are a real allocation, not a string — released on unmount so
+  // switching between clients all day does not hold every preview in memory.
+  useEffect(
+    () => () => pending.forEach((item) => URL.revokeObjectURL(item.previewUrl)),
+    // Intentionally empty: this is an unmount cleanup, and depending on
+    // `pending` would revoke previews the moment the list changed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  )
+
+  async function onFiles(event) {
+    const files = Array.from(event.target.files ?? [])
+    event.target.value = '' // let the same file be picked twice
+
+    const room = MAX_ATTACHMENTS - pending.length
+    if (files.length > room) {
+      toast.error(`You can attach up to ${MAX_ATTACHMENTS} images per message.`)
+    }
+
+    for (const file of files.slice(0, Math.max(room, 0))) {
+      if (file.size > MAX_MB * 1024 * 1024) {
+        toast.error(
+          `${file.name} is ${(file.size / 1024 / 1024).toFixed(0)} MB — the limit is ${MAX_MB} MB.`,
+        )
+        continue
+      }
+
+      const localId = crypto.randomUUID()
+      const previewUrl = URL.createObjectURL(file)
+      setPending((list) => [...list, { localId, previewUrl, status: 'uploading', progress: 0 }])
+
+      try {
+        const uploaded = await api.inbox.uploadAttachment(file, (progress) =>
+          setPending((list) =>
+            list.map((item) => (item.localId === localId ? { ...item, progress } : item)),
+          ),
+        )
+        setPending((list) =>
+          list.map((item) =>
+            item.localId === localId ? { ...item, id: uploaded.id, status: 'ready' } : item,
+          ),
+        )
+      } catch (failure) {
+        toast.error(errorMessage(failure))
+        URL.revokeObjectURL(previewUrl)
+        setPending((list) => list.filter((item) => item.localId !== localId))
+      }
+    }
+  }
+
+  function discardPending(item) {
+    URL.revokeObjectURL(item.previewUrl)
+    setPending((list) => list.filter((entry) => entry.localId !== item.localId))
+    if (item.id) api.inbox.discardAttachment(item.id).catch(() => {})
+  }
+
   const send = useMutation({
     mutationFn: (body) => api.inbox.reply(clientId, body),
     onSuccess: (message) => {
@@ -132,6 +240,8 @@ export function ThreadView({ clientId, className }) {
         previous ? { ...previous, messages: [...previous.messages, message] } : previous,
       )
       queryClient.invalidateQueries({ queryKey: ['threads'] })
+      pending.forEach((item) => URL.revokeObjectURL(item.previewUrl))
+      setPending([])
       setDraft('')
     },
     onError: (failure) => toast.error(errorMessage(failure, 'That message did not send.')),
@@ -150,10 +260,18 @@ export function ThreadView({ clientId, className }) {
     endRef.current?.scrollIntoView({ block: 'end' })
   }, [data?.messages?.length])
 
+  const uploading = pending.some((item) => item.status === 'uploading')
+
   function submit(event) {
     event.preventDefault()
     const body = draft.trim()
-    if (body) send.mutate({ body })
+    const ready = pending.filter((item) => item.status === 'ready' && item.id)
+    if (!body && !ready.length) return
+    if (uploading) {
+      toast.error('Wait for the images to finish uploading.')
+      return
+    }
+    send.mutate({ body, attachment_ids: ready.map((item) => item.id) })
   }
 
   if (isError) return <ErrorState error={error} onRetry={refetch} />
@@ -212,6 +330,8 @@ export function ThreadView({ clientId, className }) {
         <div ref={endRef} />
       </div>
 
+      <PendingStrip pending={pending} onRemove={discardPending} />
+
       <form onSubmit={submit} className="flex items-end gap-2 border-t border-ink-600 p-3">
         <textarea
           value={draft}
@@ -226,7 +346,32 @@ export function ThreadView({ clientId, className }) {
           aria-label="Reply to this client"
           className="min-h-11 flex-1 resize-y rounded-md border border-ink-600 bg-ink-900 px-3 py-2 text-sm text-white placeholder:text-chalk-500 focus:border-brand-500 focus:outline-none"
         />
-        <Button type="submit" size="sm" loading={send.isPending} disabled={!draft.trim()}>
+
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          multiple
+          onChange={onFiles}
+          className="sr-only"
+          aria-hidden="true"
+          tabIndex={-1}
+        />
+        <IconButton
+          type="button"
+          variant="subtle"
+          label="Attach an image"
+          icon={ImagePlus}
+          onClick={() => fileRef.current?.click()}
+          disabled={pending.length >= MAX_ATTACHMENTS}
+        />
+
+        <Button
+          type="submit"
+          size="sm"
+          loading={send.isPending}
+          disabled={uploading || (!draft.trim() && !pending.some((item) => item.status === 'ready'))}
+        >
           <Send className="size-4" aria-hidden="true" />
           Send
         </Button>
