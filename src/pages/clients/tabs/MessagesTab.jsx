@@ -13,13 +13,6 @@ import { toast } from '@/components/ui/Toast'
 const MAX_ATTACHMENTS = 6
 const MAX_MB = 6
 
-/**
- * Full-size view of one attached photo.
- *
- * Worth the extra component because the thumbnails in the thread are 160px
- * tall, and the whole point of a client photographing their setup is that the
- * coach can see the detail — a knee tracking in, a grip width, a bar path.
- */
 function Lightbox({ attachment, onClose }) {
   useEffect(() => {
     function onKey(event) {
@@ -82,8 +75,6 @@ function Attachments({ attachments, onOpen }) {
           <img
             src={attachment.url}
             alt={attachment.original_name || 'Photo sent by the client'}
-            // Reserving the box stops the thread jumping as each image lands,
-            // which is especially unpleasant mid-scroll through a long history.
             width={attachment.width ?? undefined}
             height={attachment.height ?? undefined}
             loading="lazy"
@@ -95,14 +86,6 @@ function Attachments({ attachments, onOpen }) {
   )
 }
 
-/**
- * The composer's pending strip — images uploaded but not yet sent.
- *
- * Previews come from `URL.createObjectURL` on the local File rather than a
- * round trip to the server: the bytes are already in the browser, so
- * fetching them back would only add latency at the one moment the coach is
- * waiting to hit send.
- */
 function PendingStrip({ pending, onRemove }) {
   if (!pending.length) return null
 
@@ -137,18 +120,7 @@ function PendingStrip({ pending, onRemove }) {
   )
 }
 
-/**
- * One conversation with one client.
- *
- * Opening this marks the client's messages as read server-side — that is what
- * the unread badge in the sidebar counts, and it should not need a second
- * click to clear. The sidebar count is invalidated on load for that reason.
- *
- * Attachment URLs arrive already signed and are short-lived by design, which
- * is why the poll below matters for more than new messages: a thread left open
- * past the token's life refetches and picks up fresh URLs before the images
- * would otherwise start 404ing.
- */
+
 export function ThreadView({ clientId, className }) {
   const queryClient = useQueryClient()
   const [draft, setDraft] = useState('')
@@ -156,27 +128,16 @@ export function ThreadView({ clientId, className }) {
   const endRef = useRef(null)
   const fileRef = useRef(null)
 
-  // Pending attachments: uploaded to the server but not yet attached to a
-  // reply. Each carries a local preview URL so the strip renders instantly
-  // and the server id so send can claim it — same pattern as the client
-  // portal's composer in `frontend/src/pages/portal/MessagesPage.jsx`.
   const [pending, setPending] = useState([])
 
   const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: keys.thread(clientId),
     queryFn: () => api.inbox.thread(clientId),
     enabled: Boolean(clientId),
-    // An open conversation should feel live. Eight seconds is fast enough that
-    // a reply lands while the coach is still looking at the thread, and cheap
-    // enough that it is one small request per client being actively read.
     refetchInterval: 8_000,
-    // Not while the tab is hidden — a dashboard left open overnight should not
-    // spend the night polling.
     refetchIntervalInBackground: false,
   })
 
-  // Object URLs are a real allocation, not a string — released on unmount so
-  // switching between clients all day does not hold every preview in memory.
   useEffect(
     () => () => pending.forEach((item) => URL.revokeObjectURL(item.previewUrl)),
     // Intentionally empty: this is an unmount cleanup, and depending on
