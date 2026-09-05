@@ -10,15 +10,11 @@ FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-# Copy the manifests alone first so `npm ci` is cached until a dependency
-# actually changes, not on every source edit.
 COPY package*.json ./
 RUN npm ci
 
 COPY . .
 
-# Vite inlines VITE_* at build time, so these are ARGs, not runtime env.
-# On Coolify set them under "Build Variables".
 ARG VITE_API_URL=""
 ARG VITE_DASHBOARD_URL="https://coach.autonomyfitness.press"
 ARG VITE_PORTAL_URL="https://autonomyfitness.press"
@@ -34,7 +30,12 @@ RUN npm run build
 FROM nginx:1.27-alpine AS runtime
 
 RUN rm /etc/nginx/conf.d/default.conf
-COPY nginx.conf /etc/nginx/conf.d/coach-auto-dashboard.conf
+ENV NGINX_ENVSUBST_FILTER="^(API_ORIGIN|API_UPSTREAM)$$"
+
+ENV API_ORIGIN=""
+ENV API_UPSTREAM="http://api:8000"
+
+COPY nginx.conf.template /etc/nginx/templates/coach-auto-dashboard.conf.template
 COPY --from=builder /app/dist /usr/share/nginx/html
 
 EXPOSE 8080

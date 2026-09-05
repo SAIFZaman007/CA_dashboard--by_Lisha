@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Eye, EyeOff, Pencil, PlayCircle, Plus, Search, Star, Trash2 } from 'lucide-react'
 
 import { api, errorMessage } from '@/lib/api'
+import { capturePosterFrame, posterFileFrom } from '@/lib/videoPoster'
 import { keys } from '@/lib/queryClient'
 import { CATEGORY_LABELS, cn, embedUrl, formatDate, LEVEL_LABELS, titleCase } from '@/lib/utils'
 import { PageHeader } from '@/components/layout/PageHeader'
@@ -30,6 +31,9 @@ const BLANK = {
   sort_order: 0,
   file_key: null,
   file_name: null,
+  // The poster frame captured from an uploaded video. A key, never a URL —
+  // the API signs the address per request, so a stored one would expire.
+  thumbnail_key: null,
 }
 
 const EQUIPMENT = [
@@ -129,6 +133,10 @@ function TutorialForm({ open, tutorial, onClose }) {
       // Send whichever source is set; the API rejects a tutorial with neither.
       video_url: form.video_url?.trim() || null,
       file_key: form.file_key || null,
+      // Only sent when there is one. Sending null on an edit would read as
+      // "clear the poster" and quietly strip the thumbnail off a tutorial the
+      // coach only meant to rename.
+      ...(form.thumbnail_key ? { thumbnail_key: form.thumbnail_key } : {}),
       summary: form.summary || null,
       description: form.description || null,
       category: form.category,
@@ -183,10 +191,24 @@ function TutorialForm({ open, tutorial, onClose }) {
                 : null
             }
             disabled={Boolean(form.video_url?.trim())}
-            onUploaded={(data, file) =>
+            onUploaded={async (data, file) => {
               setForm((f) => ({ ...f, file_key: data.file_key, file_name: file.name }))
+              // Grab a still off the clip the coach just chose. Best-effort by
+              // design: a codec this browser cannot decode costs a thumbnail,
+              // never the upload, so a failure here is swallowed and the card
+              // simply falls back to the placeholder.
+              try {
+                const frame = await capturePosterFrame(file)
+                if (!frame) return
+                const poster = await api.tutorials.uploadPoster(posterFileFrom(frame, file.name))
+                setForm((f) => ({ ...f, thumbnail_key: poster.thumbnail_key }))
+              } catch {
+                /* no thumbnail this time; the tutorial still saves */
+              }
+            }}
+            onCleared={() =>
+              setForm((f) => ({ ...f, file_key: null, file_name: null, thumbnail_key: null }))
             }
-            onCleared={() => setForm((f) => ({ ...f, file_key: null, file_name: null }))}
           />
         </div>
 

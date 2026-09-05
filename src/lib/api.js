@@ -4,14 +4,11 @@ const BASE_URL = import.meta.env.VITE_API_URL || '/api/v1'
 
 export const http = axios.create({
   baseURL: BASE_URL,
-  withCredentials: true, // carries the HttpOnly refresh cookie
+  withCredentials: true,
   timeout: 30000,
   headers: { Accept: 'application/json' },
 })
 
-// The access token is held in memory only. Nothing about a coach's session is
-// written to localStorage, so an XSS bug cannot walk away with the keys to
-// every client record in the system.
 let accessToken = null
 let onSessionLost = () => {}
 
@@ -30,8 +27,6 @@ http.interceptors.request.use((config) => {
   return config
 })
 
-// One shared refresh: a screen that fires six queries at once should not
-// trigger six token rotations and invalidate five of them.
 let refreshPromise = null
 
 http.interceptors.response.use(
@@ -44,10 +39,6 @@ http.interceptors.response.use(
     if (status === 401 && !original?._retried && !isAuthRoute) {
       original._retried = true
       try {
-        // `audience=staff` tells the API which of the two isolated session
-        // cookies to read — this app's, not the client portal's. See
-        // REFRESH_COOKIE_NAMES in the backend's auth endpoint for why the two
-        // apps no longer share one cookie slot.
         refreshPromise ??= http.post('/auth/refresh?audience=staff').finally(() => {
           refreshPromise = null
         })
@@ -64,7 +55,6 @@ http.interceptors.response.use(
   },
 )
 
-/** Turn any API failure into a sentence worth showing a person. */
 export function errorMessage(error, fallback = 'Something went wrong. Try again.') {
   const data = error?.response?.data
   if (data?.fields) return Object.values(data.fields)[0]
@@ -99,7 +89,6 @@ export const api = {
     get: (id, days = 180) => get(`/admin/clients/${id}`, { days }),
     updateAccount: (id, body) => patch(`/admin/clients/${id}`, body),
     updateProfile: (id, body) => patch(`/admin/clients/${id}/profile`, body),
-    // `hard` erases the record; the default deactivates and is reversible.
     remove: (id, hard = false) => del(`/admin/clients/${id}`, { hard }),
     resetPassword: (id, password) => post(`/admin/clients/${id}/reset-password`, { password }),
     activity: (id) => get(`/admin/clients/${id}/activity`),
@@ -137,14 +126,17 @@ export const api = {
     update: (id, body) => patch(`/admin/tutorials/${id}`, body),
     remove: (id) => del(`/admin/tutorials/${id}`),
     reorder: (ids) => post('/admin/tutorials/reorder', ids),
-    // Video bytes go up on their own request; see UploadDropzone for why.
     uploadEndpoint: '/admin/tutorials/upload',
+
+    uploadPoster: (file) => {
+      const body = new FormData()
+      body.append('file', file)
+      return post('/admin/tutorials/poster', body, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+    },
   },
 
-  // The Hall of the Coach. Bytes go up first and come back as an `image_key`,
-  // which the create form then submits alongside the title and alt text —
-  // the same upload-first shape as tutorial videos, for the same reason: a
-  // rejected title should never cost the coach a re-upload.
   gallery: {
     list: (params) => get('/admin/gallery', params),
     create: (body) => post('/admin/gallery', body),
@@ -162,9 +154,6 @@ export const api = {
     },
   },
 
-  // The exercise library is shared with the client portal, so the per-row CRUD
-  // is the existing coach-only routes rather than anything under /admin. The
-  // two bulk operations underneath it are admin-only and do live there.
   exercises: {
     list: (params) => get('/exercises', params),
     filters: () => get('/exercises/filters'),
@@ -172,15 +161,9 @@ export const api = {
     update: (id, body) => patch(`/exercises/${id}`, body),
     retire: (id) => del(`/exercises/${id}`),
 
-    // Import or refresh the catalogue shipped with the backend. Additive by
-    // default — it never overwrites a link or cue edited by hand, so it is
-    // safe to run after any deploy.
     sync: (overwriteVideos = false) =>
       post('/admin/exercises/sync', null, { params: { overwrite_videos: overwriteVideos } }),
 
-    // HEAD-checks every demonstration link. The catalogue's URLs are derived
-    // from a slug pattern rather than scraped, so a handful will not resolve;
-    // this finds all of them in one pass. Slow by nature — allow a minute.
     verifyLinks: (limit) =>
       post('/admin/exercises/verify-links', null, {
         params: limit ? { limit } : undefined,
@@ -193,12 +176,6 @@ export const api = {
     unreadCount: () => get('/admin/unread-count'),
     thread: (clientId) => get(`/admin/clients/${clientId}/thread`),
     reply: (clientId, body) => post(`/admin/clients/${clientId}/thread`, body),
-    // Same upload endpoint the client portal uses (`POST /messages/attachments`
-    // — outside the `/admin` prefix on purpose, since the image itself is
-    // stored identically for either side of a conversation; only which thread
-    // it lands in differs, and that is resolved when the reply is sent). Bytes
-    // go up before the reply that references them exists, same reasoning as
-    // the client composer: a slow upload should not block the text box.
     uploadAttachment: (file, onProgress) => {
       const body = new FormData()
       body.append('file', file)
