@@ -4,12 +4,41 @@
 # favour of pointing the browser straight at the API domain unless you have
 # also switched the backend to SameSite=None cookies.
 #
-# Two deployment shapes are supported; see the equivalent note in the client
-# portal's nginx.conf for the full explanation. In short: either the browser
-# talks only to this server (leave VITE_API_URL and PUBLIC_API_URL blank), or
-# it talks to the API on its own hostname (set both to the same value). The
-# combination that fails is setting VITE_API_URL while the API still emits
-# root-relative media paths — JSON works, every image and video 502s.
+# --- Nothing in this file may name a host --------------------------------------
+#
+# Every origin below is substituted at container start from the environment
+# (${API_ORIGIN}, ${API_UPSTREAM}; see the Dockerfile), exactly as in the client
+# portal's template. A hostname baked into a built image is a hostname that
+# silently rots: this file previously carried a literal API origin in `img-src`,
+# and when it stopped matching the API's real address every message attachment
+# in the inbox was refused by the browser before a request was made. A
+# CSP-blocked image reports as an ordinary load error, so the dashboard showed
+# "Tap to retry" on every photo and the API log showed nothing at all.
+#
+# Two deployment shapes are supported.
+#
+#   Same-origin. The browser talks only to this server; `/api/` proxies to the
+#   backend. Leave VITE_API_URL blank at build time and API_ORIGIN blank here.
+#   'self' covers the media and the CSP needs nothing added.
+#
+#   Split-origin. The browser talks to the API on its own hostname. Set
+#   VITE_API_URL at build time and API_ORIGIN here to the same value, scheme
+#   included.
+#
+# The API derives its media origin from the request it is answering, so it
+# follows whichever shape is in use without a second setting to keep in sync.
+# API_ORIGIN only ever has to match what the browser is actually told to call.
+
+# nginx templates land in the http context, so this map is legal here. It
+# exists because the block below must forward the *browser's* protocol, not
+# this hop's. Coolify terminates TLS in front of this container, so `$scheme`
+# is http on the inside; forwarding that verbatim tells the API it is being
+# reached over http, and the media URLs it hands back are then blocked as mixed
+# content on an https page.
+map $http_x_forwarded_proto $ca_forwarded_proto {
+    default $scheme;
+    "~^https?$" $http_x_forwarded_proto;
+}
 
 server {
     listen 8080;
@@ -24,16 +53,15 @@ server {
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
     add_header Permissions-Policy "geolocation=(), microphone=(), camera=()" always;
 
-    # frame-src allows the hosted tutorial preview players. img-src allows the
-    # video host thumbnails the coach pastes in.
+    # frame-src allows the hosted tutorial preview players; the ytimg/vimeocdn
+    # entries in img-src are their thumbnails.
     #
-    # SPLIT-ORIGIN: the API origin appears in img-src, media-src and
-    # connect-src because uploaded tutorial previews and message attachments
-    # are served from there. `media-src https:` was already wide enough to
-    # cover the video element by accident; the attachments in the inbox were
-    # not, which is why they were the ones that broke. It must match
-    # PUBLIC_API_URL on the backend exactly, scheme included.
-    add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://i.ytimg.com https://i.vimeocdn.com https://ca-backend.maktechgroups.com; media-src 'self' blob: https:; font-src 'self' data:; connect-src 'self' https://ca-backend.maktechgroups.com; frame-src https://www.youtube-nocookie.com https://www.youtube.com https://player.vimeo.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" always;
+    # ${API_ORIGIN} appears in img-src, media-src *and* connect-src. These are
+    # separate directives and a wildcard on one covers nothing on another —
+    # `media-src https:` was once wide enough to carry the tutorial player by
+    # accident while img-src silently refused every attachment in the inbox.
+    # If the API is added to one of these it belongs in all three.
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://i.ytimg.com https://i.vimeocdn.com ${API_ORIGIN}; media-src 'self' blob: ${API_ORIGIN}; font-src 'self' data:; connect-src 'self' ${API_ORIGIN}; frame-src https://www.youtube-nocookie.com https://www.youtube.com https://player.vimeo.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" always;
 
     gzip on;
     gzip_vary on;
@@ -52,16 +80,23 @@ server {
         #
         # A wrong name here is indistinguishable from a dead backend: nginx has
         # nothing to proxy to and answers 502. Verify it against the backend's
-        # real service name on this network before assuming it is correct.
+        # real service name on this network before assuming it is correct — in
+        # Coolify the service name is not always the one in the compose file.
         resolver 127.0.0.11 valid=30s ipv6=off;
-        set $api_upstream http://api:8000;
+        set $api_upstream ${API_UPSTREAM};
 
         proxy_pass $api_upstream;
         proxy_http_version 1.1;
+
+        # `Host` is passed through unchanged, and the API reads it to decide
+        # what origin to advertise its media at. It is validated against the
+        # backend's trusted-host list before use, so a bogus value degrades to
+        # a root-relative URL rather than being trusted.
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Proto $ca_forwarded_proto;
         proxy_set_header Connection "";
 
         # The coach's own preview player seeks through uploaded clips, so range
