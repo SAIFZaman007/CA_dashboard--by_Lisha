@@ -120,22 +120,53 @@ server {
         proxy_read_timeout 600s;
     }
 
+    # --- Why every header is repeated in the locations below -------------------
+    #
+    # `add_header` does not accumulate across nesting levels. A location block
+    # that declares even one `add_header` of its own DISCARDS every one
+    # inherited from the server block. That is nginx's documented behaviour and
+    # it is the single easiest security regression to ship without noticing.
+    #
+    # Three blocks below each set a `Cache-Control` header, and in doing so
+    # each was silently dropping the entire set above — including the Content
+    # Security Policy. The block it mattered most for was `= /index.html`: that
+    # is the *document*, the only response a CSP can actually govern, and it
+    # was the one response being served without one. The policy existed, looked
+    # correct in the config, and applied to nothing that mattered.
+    #
+    # So the full set is restated in each. If a header is added or changed
+    # above, change it in all four places or it will not apply where it counts.
+
     location /assets/ {
         expires 1y;
-        add_header Cache-Control "public, immutable";
+        add_header Cache-Control "public, immutable" always;
+        add_header X-Content-Type-Options "nosniff" always;
         access_log off;
     }
 
     # Static build artefacts only — `^~ /api/` above is matched first.
     location ~* \.(png|jpe?g|webp|svg|ico|woff2?)$ {
         expires 30d;
-        add_header Cache-Control "public";
+        add_header Cache-Control "public" always;
+        add_header X-Content-Type-Options "nosniff" always;
         access_log off;
     }
 
     location = /index.html {
-        add_header Cache-Control "no-store, must-revalidate";
+        # The document. Never cached, so a deploy is picked up on the
+        # next navigation rather than whenever a stale copy expires —
+        # which is what makes the SPA's chunk-retry recovery work.
+        add_header Cache-Control "no-store, must-revalidate" always;
+
+        # Repeated, not inherited. See the note above `location /assets/`.
+        add_header X-Robots-Tag "noindex, nofollow" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-Frame-Options "DENY" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        add_header Permissions-Policy "geolocation=(), microphone=(), camera=()" always;
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://i.ytimg.com https://i.vimeocdn.com ${API_ORIGIN}; media-src 'self' blob: ${API_ORIGIN}; font-src 'self' data:; connect-src 'self' ${API_ORIGIN}; frame-src https://www.youtube-nocookie.com https://www.youtube.com https://player.vimeo.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" always;
     }
+
 
     location /health {
         access_log off;

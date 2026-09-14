@@ -1,23 +1,25 @@
-import { lazy, Suspense, useEffect } from 'react'
-import { Navigate, Route, Routes, useLocation } from 'react-router'
+import { Suspense, useEffect } from 'react'
+import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router'
 
 import { useAuth } from '@/store/auth'
 import { AdminLayout } from '@/components/layout/AdminLayout'
-import { FullPageSpinner } from '@/components/ui/Feedback'
+import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
+import { FullPageSpinner, Spinner } from '@/components/ui/Feedback'
 import { ToastHost } from '@/components/ui/Toast'
+import { clearChunkReloadFlag, lazyWithRetry } from '@/lib/lazyWithRetry'
 
-const LoginPage = lazy(() => import('@/pages/LoginPage'))
-const OverviewPage = lazy(() => import('@/pages/OverviewPage'))
-const ClientsPage = lazy(() => import('@/pages/clients/ClientsPage'))
-const ClientDetailPage = lazy(() => import('@/pages/clients/ClientDetailPage'))
-const MessagesPage = lazy(() => import('@/pages/MessagesPage'))
-const LeadsPage = lazy(() => import('@/pages/LeadsPage'))
-const BookingsPage = lazy(() => import('@/pages/BookingsPage'))
-const TutorialsPage = lazy(() => import('@/pages/TutorialsPage'))
-const ExercisesPage = lazy(() => import('@/pages/ExercisesPage'))
-const GalleryPage = lazy(() => import('@/pages/GalleryPage'))
-const PlansPage = lazy(() => import('@/pages/PlansPage'))
-const NotFound = lazy(() => import('@/pages/NotFound'))
+const LoginPage = lazyWithRetry(() => import('@/pages/LoginPage'))
+const OverviewPage = lazyWithRetry(() => import('@/pages/OverviewPage'))
+const ClientsPage = lazyWithRetry(() => import('@/pages/clients/ClientsPage'))
+const ClientDetailPage = lazyWithRetry(() => import('@/pages/clients/ClientDetailPage'))
+const MessagesPage = lazyWithRetry(() => import('@/pages/MessagesPage'))
+const LeadsPage = lazyWithRetry(() => import('@/pages/LeadsPage'))
+const BookingsPage = lazyWithRetry(() => import('@/pages/BookingsPage'))
+const TutorialsPage = lazyWithRetry(() => import('@/pages/TutorialsPage'))
+const ExercisesPage = lazyWithRetry(() => import('@/pages/ExercisesPage'))
+const GalleryPage = lazyWithRetry(() => import('@/pages/GalleryPage'))
+const PlansPage = lazyWithRetry(() => import('@/pages/PlansPage'))
+const NotFound = lazyWithRetry(() => import('@/pages/NotFound'))
 
 function ScrollToTop() {
   const { pathname } = useLocation()
@@ -25,6 +27,24 @@ function ScrollToTop() {
     window.scrollTo(0, 0)
   }, [pathname])
   return null
+}
+
+function DashboardOutlet() {
+  const { pathname } = useLocation()
+
+  return (
+    <ErrorBoundary key={pathname}>
+      <Suspense
+        fallback={
+          <div className="flex min-h-[40vh] items-center justify-center">
+            <Spinner className="size-6 text-brand-500" />
+          </div>
+        }
+      >
+        <Outlet />
+      </Suspense>
+    </ErrorBoundary>
+  )
 }
 
 function RequireStaff({ children }) {
@@ -52,42 +72,50 @@ export default function App() {
     bootstrap()
   }, [bootstrap])
 
+  useEffect(() => {
+    clearChunkReloadFlag()
+  }, [])
+
   return (
     <>
       <ScrollToTop />
       <ToastHost />
-      <Suspense fallback={<FullPageSpinner />}>
-        <Routes>
-          <Route
-            path="/login"
-            element={
-              <RedirectIfSignedIn>
-                <LoginPage />
-              </RedirectIfSignedIn>
-            }
-          />
+      <ErrorBoundary>
+        <Suspense fallback={<FullPageSpinner />}>
+          <Routes>
+            <Route
+              path="/login"
+              element={
+                <RedirectIfSignedIn>
+                  <LoginPage />
+                </RedirectIfSignedIn>
+              }
+            />
 
-          <Route
-            element={
-              <RequireStaff>
-                <AdminLayout />
-              </RequireStaff>
-            }
-          >
-            <Route index element={<OverviewPage />} />
-            <Route path="clients" element={<ClientsPage />} />
-            <Route path="clients/:clientId" element={<ClientDetailPage />} />
-            <Route path="messages" element={<MessagesPage />} />
-            <Route path="enquiries" element={<LeadsPage />} />
-            <Route path="bookings" element={<BookingsPage />} />
-            <Route path="tutorials" element={<TutorialsPage />} />
-            <Route path="exercises" element={<ExercisesPage />} />
-            <Route path="gallery" element={<GalleryPage />} />
-            <Route path="plans" element={<PlansPage />} />
-            <Route path="*" element={<NotFound />} />
-          </Route>
-        </Routes>
-      </Suspense>
+            <Route
+              element={
+                <RequireStaff>
+                  <AdminLayout />
+                </RequireStaff>
+              }
+            >
+              <Route element={<DashboardOutlet />}>
+                <Route index element={<OverviewPage />} />
+                <Route path="clients" element={<ClientsPage />} />
+                <Route path="clients/:clientId" element={<ClientDetailPage />} />
+                <Route path="messages" element={<MessagesPage />} />
+                <Route path="enquiries" element={<LeadsPage />} />
+                <Route path="bookings" element={<BookingsPage />} />
+                <Route path="tutorials" element={<TutorialsPage />} />
+                <Route path="exercises" element={<ExercisesPage />} />
+                <Route path="gallery" element={<GalleryPage />} />
+                <Route path="plans" element={<PlansPage />} />
+                <Route path="*" element={<NotFound />} />
+              </Route>
+            </Route>
+          </Routes>
+        </Suspense>
+      </ErrorBoundary>
     </>
   )
 }
