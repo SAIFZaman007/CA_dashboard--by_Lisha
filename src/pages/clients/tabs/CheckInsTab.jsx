@@ -10,7 +10,6 @@ import {
   YAxis,
 } from 'recharts'
 
-import { getAccessToken } from '@/lib/api'
 import { cn, formatDate, formatLength, formatWeight, titleCase } from '@/lib/utils'
 import { Card, CardBody, CardHeader } from '@/components/ui/Card'
 import { DataTable } from '@/components/ui/DataTable'
@@ -77,43 +76,57 @@ function WeightChart({ series, units }) {
 }
 
 /**
- * Check-in photos are private files behind an authenticated route, so a plain
- * <img src> would 401 — the browser will not attach the bearer token. Each
- * thumbnail is fetched with the token and held as an object URL for the life of
- * the screen.
+ * One check-in photo.
+ *
+ * A plain `<img>`, and that is the fix.
+ *
+ * This used to fetch the image with `fetch(url, { Authorization })` and hand
+ * the blob to `URL.createObjectURL`, because the coach-side photo route was
+ * guarded by a bearer token. Three things went wrong with that, and all three
+ * were visible in production:
+ *
+ *   1. An `Authorization` header makes the request non-simple, so the browser
+ *      sends a CORS preflight first. The dashboard and the API are on separate
+ *      origins, so every thumbnail depended on `OPTIONS` being allowed for the
+ *      dashboard's exact origin. It was not, and every photo failed with
+ *      `net::ERR_FAILED` plus a preflight error — which reads as a network
+ *      fault and is actually a configuration one.
+ *   2. The effect was written as `useState(() => {...})`. That is not an
+ *      effect. `useState` runs its initialiser during render and stores the
+ *      return value *as state* — so the fetch fired during render, and the
+ *      cleanup function it returned was never called by anything. Under
+ *      StrictMode that is two requests per mount and two leaked object URLs.
+ *   3. Blob URLs are uncacheable, so scrolling back up re-downloaded every
+ *      image.
+ *
+ * The backend now signs these URLs (`_photo_url` in `admin/clients.py`), so
+ * the address carries its own short-lived, photo-scoped credential. A simple
+ * `<img src>` needs no header, triggers no preflight, caches normally, leaks
+ * nothing, and needs no JavaScript at all. The `onError` fallback stays,
+ * because a signature does eventually expire and a missing photo should look
+ * deliberate rather than broken.
  */
-function PrivatePhoto({ url, alt, className, onClick }) {
-  const [objectUrl, setObjectUrl] = useState(null)
+function CheckInPhoto({ url, alt, className, onClick }) {
   const [failed, setFailed] = useState(false)
 
-  useState(() => {
-    let revoked = null
-    const token = getAccessToken()
-
-    fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
-      .then((response) => (response.ok ? response.blob() : Promise.reject(response.status)))
-      .then((blob) => {
-        revoked = URL.createObjectURL(blob)
-        setObjectUrl(revoked)
-      })
-      .catch(() => setFailed(true))
-
-    return () => revoked && URL.revokeObjectURL(revoked)
-  })
-
-  if (failed) {
+  if (failed || !url) {
     return (
-      <div className={cn('grid place-items-center bg-ink-800', className)}>
+      <div className={cn('grid place-items-center bg-ink-800', className)} title="Photo unavailable">
         <CameraOff className="size-5 text-chalk-500" aria-hidden="true" />
       </div>
     )
   }
 
-  if (!objectUrl) return <div className={cn('skeleton', className)} aria-hidden="true" />
-
   return (
     <button type="button" onClick={onClick} className={cn('block overflow-hidden', className)}>
-      <img src={objectUrl} alt={alt} className="size-full object-cover" />
+      <img
+        src={url}
+        alt={alt}
+        loading="lazy"
+        decoding="async"
+        onError={() => setFailed(true)}
+        className="size-full object-cover"
+      />
     </button>
   )
 }
@@ -295,7 +308,7 @@ export function CheckInsTab({ detail }) {
               <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
                 {detail.photos.map((photo) => (
                   <figure key={photo.id}>
-                    <PrivatePhoto
+                    <CheckInPhoto
                       url={photo.url}
                       alt={`${photo.pose} on ${formatDate(photo.log_date)}`}
                       className="aspect-3/4 w-full rounded-md"
@@ -364,7 +377,7 @@ export function CheckInsTab({ detail }) {
       >
         {zoomed && (
           <>
-            <PrivatePhoto
+            <CheckInPhoto
               url={zoomed.url}
               alt={`${zoomed.pose} on ${formatDate(zoomed.log_date)}`}
               className="mx-auto max-h-[60dvh] w-auto rounded-lg"
