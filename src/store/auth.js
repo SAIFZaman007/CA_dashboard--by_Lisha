@@ -40,8 +40,14 @@ export const useAuth = create((set, get) => ({
 
   async _doBootstrap() {
     try {
-      const { access_token } = await api.auth.refresh()
-      setAccessToken(access_token)
+      // 204 (no body) means an anonymous visitor: no session to resume.
+      const session = await api.auth.refresh()
+      if (!session?.access_token) {
+        setAccessToken(null)
+        set({ user: null, status: 'anonymous' })
+        return
+      }
+      setAccessToken(session.access_token)
       const user = await api.auth.me()
 
       if (!STAFF_ROLES.includes(user.role)) {

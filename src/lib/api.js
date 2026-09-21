@@ -1,9 +1,28 @@
 import axios from 'axios'
 
-const BASE_URL = import.meta.env.VITE_API_URL || '/api/v1'
+/**
+ * Resolve the API base URL once, safely.
+ *
+ * `VITE_API_URL` is optional. Blank (the default in every .env file) means the
+ * API is served from the same origin under `/api/v1` — the Vite dev proxy
+ * locally, nginx in production. It may also hold a full base
+ * (`https://api.example.com/api/v1`) or just an origin
+ * (`http://localhost:8000`), and `/api/v1` is appended when missing.
+ *
+ * `??` is not enough here: Vite turns `VITE_API_URL=` into an empty string,
+ * which `??` keeps, so every request went to `/programs` instead of
+ * `/api/v1/programs` and 404'd.
+ */
+function resolveApiBase(raw) {
+  const value = String(raw ?? '').trim().replace(/\/+$/, '')
+  if (!value) return '/api/v1'
+  return /\/api\/v\d+$/.test(value) ? value : `${value}/api/v1`
+}
+
+export const API_BASE_URL = resolveApiBase(import.meta.env.VITE_API_URL)
 
 export const http = axios.create({
-  baseURL: BASE_URL,
+  baseURL: API_BASE_URL,
   withCredentials: true,
   timeout: 30000,
   headers: { Accept: 'application/json' },
@@ -43,6 +62,8 @@ http.interceptors.response.use(
           refreshPromise = null
         })
         const { data } = await refreshPromise
+        // 204 (no session cookie) carries no token: the session is gone.
+        if (!data?.access_token) throw new Error('No session to resume')
         setAccessToken(data.access_token)
         original.headers.Authorization = `Bearer ${data.access_token}`
         return http(original)
