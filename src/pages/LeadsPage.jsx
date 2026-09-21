@@ -110,6 +110,7 @@ export default function LeadsPage() {
       header: 'Status',
       render: (row) => (
         <select
+          name="leads_status_for"
           value={row.status}
           aria-label={`Status for ${row.full_name}`}
           onChange={(event) => setStatus.mutate({ id: row.id, status: event.target.value })}

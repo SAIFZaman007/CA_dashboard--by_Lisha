@@ -166,6 +166,7 @@ export function UploadDropzone({
       </div>
 
       <input
+        name="uploaddropzone_file"
         ref={inputRef}
         type="file"
         accept={accept}

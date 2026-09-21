@@ -124,6 +124,8 @@ function CheckInPhoto({ url, alt, className, onClick }) {
         alt={alt}
         loading="lazy"
         decoding="async"
+        width={300}
+        height={400}
         onError={() => setFailed(true)}
         className="size-full object-cover"
       />

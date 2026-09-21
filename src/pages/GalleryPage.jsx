@@ -200,6 +200,7 @@ function ImageEditor({ open, onClose, image }) {
           </button>
 
           <input
+            name="gallery_file"
             ref={inputRef}
             type="file"
             accept="image/jpeg,image/png,image/webp"

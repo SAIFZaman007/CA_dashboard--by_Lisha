@@ -56,12 +56,16 @@ server {
     # frame-src allows the hosted tutorial preview players; the ytimg/vimeocdn
     # entries in img-src are their thumbnails.
     #
+    # https://res.cloudinary.com: all uploads (plan artwork, gallery, check-in
+    # photos, message images, tutorial videos and posters) are stored there.
+    # Private ones reach the browser as a 307 from the API to a signed CDN URL.
+    #
     # ${API_ORIGIN} appears in img-src, media-src *and* connect-src. These are
     # separate directives and a wildcard on one covers nothing on another —
     # `media-src https:` was once wide enough to carry the tutorial player by
     # accident while img-src silently refused every attachment in the inbox.
     # If the API is added to one of these it belongs in all three.
-    add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://i.ytimg.com https://i.vimeocdn.com ${API_ORIGIN}; media-src 'self' blob: ${API_ORIGIN}; font-src 'self' data:; connect-src 'self' ${API_ORIGIN}; frame-src https://www.youtube-nocookie.com https://www.youtube.com https://player.vimeo.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" always;
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://res.cloudinary.com https://i.ytimg.com https://i.vimeocdn.com ${API_ORIGIN}; media-src 'self' blob: https://res.cloudinary.com ${API_ORIGIN}; font-src 'self' data:; connect-src 'self' ${API_ORIGIN}; frame-src https://www.youtube-nocookie.com https://www.youtube.com https://player.vimeo.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" always;
 
     gzip on;
     gzip_vary on;
@@ -145,7 +149,7 @@ server {
     }
 
     # Static build artefacts only — `^~ /api/` above is matched first.
-    location ~* \.(png|jpe?g|webp|svg|ico|woff2?)$ {
+    location ~* \.(png|jpe?g|webp|avif|svg|ico|woff2?)$ {
         expires 30d;
         add_header Cache-Control "public" always;
         add_header X-Content-Type-Options "nosniff" always;
@@ -164,7 +168,7 @@ server {
         add_header X-Frame-Options "DENY" always;
         add_header Referrer-Policy "strict-origin-when-cross-origin" always;
         add_header Permissions-Policy "geolocation=(), microphone=(), camera=()" always;
-        add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://i.ytimg.com https://i.vimeocdn.com ${API_ORIGIN}; media-src 'self' blob: ${API_ORIGIN}; font-src 'self' data:; connect-src 'self' ${API_ORIGIN}; frame-src https://www.youtube-nocookie.com https://www.youtube.com https://player.vimeo.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" always;
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://res.cloudinary.com https://i.ytimg.com https://i.vimeocdn.com ${API_ORIGIN}; media-src 'self' blob: https://res.cloudinary.com ${API_ORIGIN}; font-src 'self' data:; connect-src 'self' ${API_ORIGIN}; frame-src https://www.youtube-nocookie.com https://www.youtube.com https://player.vimeo.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" always;
     }
 
 

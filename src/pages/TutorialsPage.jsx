@@ -31,8 +31,6 @@ const BLANK = {
   sort_order: 0,
   file_key: null,
   file_name: null,
-  // The poster frame captured from an uploaded video. A key, never a URL —
-  // the API signs the address per request, so a stored one would expire.
   thumbnail_key: null,
 }
 
@@ -47,9 +45,6 @@ const EQUIPMENT = [
   'other',
 ]
 
-/** Live preview inside the editor: paste a link, see the player before saving.
- *  Catches a wrong or private video at authoring time rather than after a
- *  client messages to say the clip does not play. */
 function Preview({ url }) {
   const provider = url.includes('youtu') ? 'youtube' : url.includes('vimeo') ? 'vimeo' : 'direct'
   const src = embedUrl({ provider, video_url: url })
@@ -130,12 +125,8 @@ function TutorialForm({ open, tutorial, onClose }) {
     setError(null)
     save.mutate({
       title: form.title,
-      // Send whichever source is set; the API rejects a tutorial with neither.
       video_url: form.video_url?.trim() || null,
       file_key: form.file_key || null,
-      // Only sent when there is one. Sending null on an edit would read as
-      // "clear the poster" and quietly strip the thumbnail off a tutorial the
-      // coach only meant to rename.
       ...(form.thumbnail_key ? { thumbnail_key: form.thumbnail_key } : {}),
       summary: form.summary || null,
       description: form.description || null,
@@ -170,10 +161,6 @@ function TutorialForm({ open, tutorial, onClose }) {
       }
     >
       <div className="space-y-4">
-        {/* Upload or link — one tutorial needs one of the two, not both.
-            Uploading is the default because that is what the coach does with a
-            phone recording; linking stays available for anything already on
-            YouTube, where the hosting and bandwidth are somebody else's. */}
         <div>
           <p className="mb-1.5 font-display text-[11px] font-semibold uppercase tracking-widest text-chalk-400">
             Video <span className="text-brand-500">*</span>
@@ -193,10 +180,6 @@ function TutorialForm({ open, tutorial, onClose }) {
             disabled={Boolean(form.video_url?.trim())}
             onUploaded={async (data, file) => {
               setForm((f) => ({ ...f, file_key: data.file_key, file_name: file.name }))
-              // Grab a still off the clip the coach just chose. Best-effort by
-              // design: a codec this browser cannot decode costs a thumbnail,
-              // never the upload, so a failure here is swallowed and the card
-              // simply falls back to the placeholder.
               try {
                 const frame = await capturePosterFrame(file)
                 if (!frame) return
@@ -333,6 +316,9 @@ function TutorialCard({ tutorial, onEdit, onToggle, onDelete }) {
             src={tutorial.thumbnail_url}
             alt=""
             loading="lazy"
+            decoding="async"
+            width={640}
+            height={360}
             className="size-full object-cover"
           />
         ) : (
@@ -454,6 +440,7 @@ export default function TutorialsPage() {
             aria-hidden="true"
           />
           <input
+            name="tutorials_search"
             type="search"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
@@ -463,6 +450,7 @@ export default function TutorialsPage() {
           />
         </div>
         <select
+          name="tutorials_select"
           value={category}
           onChange={(event) => setCategory(event.target.value)}
           aria-label="Filter by category"

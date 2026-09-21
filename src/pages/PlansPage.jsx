@@ -263,6 +263,9 @@ function PlanCard({ plan, onEdit, onArchive, onDelete }) {
           src={plan.image_url}
           alt=""
           loading="lazy"
+          decoding="async"
+          width={640}
+          height={360}
           className="mb-4 aspect-video w-full rounded-lg border border-ink-600 object-cover"
         />
       )}

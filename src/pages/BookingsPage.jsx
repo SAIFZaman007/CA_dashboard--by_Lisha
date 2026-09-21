@@ -164,6 +164,7 @@ export default function BookingsPage() {
       header: 'Status',
       render: (row) => (
         <select
+          name="bookings_status_for"
           value={row.status}
           aria-label={`Status for ${row.name}'s consultation`}
           onChange={(event) => setStatus.mutate({ id: row.id, status: event.target.value })}

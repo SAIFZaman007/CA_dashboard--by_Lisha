@@ -295,6 +295,7 @@ export default function ClientsPage() {
             aria-hidden="true"
           />
           <input
+            name="clients_search"
             type="search"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
@@ -305,6 +306,7 @@ export default function ClientsPage() {
         </div>
 
         <select
+          name="clients_select"
           value={level}
           onChange={(event) => setFilter('level', event.target.value)}
           aria-label="Filter by level"

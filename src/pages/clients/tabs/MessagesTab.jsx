@@ -13,28 +13,6 @@ import { toast } from '@/components/ui/Toast'
 const MAX_ATTACHMENTS = 6
 const MAX_MB = 6
 
-/**
- * One attachment thumbnail or full image `<img>`, with a manual retry if it
- * fails to load.
- *
- * A signed URL image should basically never break — the thread refetches
- * every 8 seconds while it's open, comfortably inside the 15-minute window
- * `MEDIA_URL_TTL_SECONDS` gives an image — but "basically never" is not
- * "never": a request can race a refetch, a tab can sit backgrounded past
- * `refetchIntervalInBackground: false`, a network blip can land exactly
- * wrong. Retrying automatically here would be the wrong call — a thread can
- * hold a dozen thumbnails, and an image that is broken for a real reason
- * (deleted, permission revoked) turning into a dozen silent retries every
- * few seconds is its own kind of problem. A tap-to-retry costs the coach one
- * click in the rare case it is needed, and does nothing at all the rest of
- * the time.
- *
- * Deliberately does not watch `src` and clear `broken` on its own: once
- * shown, the retry state stays until the coach acts on it, even if a
- * background poll quietly lands a working URL in the meantime — the point is
- * one predictable action fixes it, not a component guessing at when to
- * un-fail itself.
- */
 function AttachmentImage({ src, alt, onInvalidate, className, width, height }) {
   const [broken, setBroken] = useState(false)
   const [attempt, setAttempt] = useState(0)
@@ -65,10 +43,6 @@ function AttachmentImage({ src, alt, onInvalidate, className, width, height }) {
       key={attempt}
       src={src}
       alt={alt}
-      // Reserving the box stops the thread jumping as each image lands,
-      // which is especially unpleasant mid-scroll through a long history.
-      // Undefined (the Lightbox's case) just means "no reservation" — an img
-      // tag ignores a width/height attribute it wasn't given.
       width={width ?? undefined}
       height={height ?? undefined}
       loading="lazy"
@@ -78,20 +52,12 @@ function AttachmentImage({ src, alt, onInvalidate, className, width, height }) {
   )
 }
 
-/**
- * Full-size view of one attached photo.
- *
- * Worth the extra component because the thumbnails in the thread are 160px
- * tall, and the whole point of a client photographing their setup is that the
- * coach can see the detail — a knee tracking in, a grip width, a bar path.
- */
 function Lightbox({ attachment, onClose, onInvalidate }) {
   useEffect(() => {
     function onKey(event) {
       if (event.key === 'Escape') onClose()
     }
     document.addEventListener('keydown', onKey)
-    // Stop the thread scrolling behind the open image.
     document.body.style.overflow = 'hidden'
     return () => {
       document.removeEventListener('keydown', onKey)
@@ -160,14 +126,6 @@ function Attachments({ attachments, onOpen, onInvalidate }) {
   )
 }
 
-/**
- * The composer's pending strip — images uploaded but not yet sent.
- *
- * Previews come from `URL.createObjectURL` on the local File rather than a
- * round trip to the server: the bytes are already in the browser, so
- * fetching them back would only add latency at the one moment the coach is
- * waiting to hit send.
- */
 function PendingStrip({ pending, onRemove }) {
   if (!pending.length) return null
 
@@ -202,18 +160,6 @@ function PendingStrip({ pending, onRemove }) {
   )
 }
 
-/**
- * One conversation with one client.
- *
- * Opening this marks the client's messages as read server-side — that is what
- * the unread badge in the sidebar counts, and it should not need a second
- * click to clear. The sidebar count is invalidated on load for that reason.
- *
- * Attachment URLs arrive already signed and are short-lived by design, which
- * is why the poll below matters for more than new messages: a thread left open
- * past the token's life refetches and picks up fresh URLs before the images
- * would otherwise start 404ing.
- */
 export function ThreadView({ clientId, className }) {
   const queryClient = useQueryClient()
   const [draft, setDraft] = useState('')
@@ -221,45 +167,24 @@ export function ThreadView({ clientId, className }) {
   const endRef = useRef(null)
   const fileRef = useRef(null)
 
-  // Pending attachments: uploaded to the server but not yet attached to a
-  // reply. Each carries a local preview URL so the strip renders instantly
-  // and the server id so send can claim it — same pattern as the client
-  // portal's composer in `frontend/src/pages/portal/MessagesPage.jsx`.
   const [pending, setPending] = useState([])
 
   const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: keys.thread(clientId),
     queryFn: () => api.inbox.thread(clientId),
     enabled: Boolean(clientId),
-    // An open conversation should feel live. Eight seconds is fast enough that
-    // a reply lands while the coach is still looking at the thread, and cheap
-    // enough that it is one small request per client being actively read.
     refetchInterval: 8_000,
-    // Not while the tab is hidden — a dashboard left open overnight should not
-    // spend the night polling.
     refetchIntervalInBackground: false,
   })
 
-  // Derived, not stored: holding only the id and looking the attachment up in
-  // `data` on every render means a retry-triggered refetch (see
-  // `AttachmentImage`'s "tap to retry") lands a freshly-signed URL in the open
-  // lightbox automatically. Holding the whole attachment object in state
-  // instead would freeze it at whatever it was the moment the lightbox
-  // opened — a refetch would update the thumbnail grid underneath, but the
-  // modal on top of it would keep showing the same now-invalidated URL.
   const lightboxAttachment = lightboxId
     ? data?.messages
         ?.flatMap((message) => message.attachments)
         .find((attachment) => attachment.id === lightboxId)
     : null
 
-  // Object URLs are a real allocation, not a string — released on unmount so
-  // switching between clients all day does not hold every preview in memory.
   useEffect(
     () => () => pending.forEach((item) => URL.revokeObjectURL(item.previewUrl)),
-    // Intentionally empty: this is an unmount cleanup, and depending on
-    // `pending` would revoke previews the moment the list changed.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   )
 
@@ -416,6 +341,7 @@ export function ThreadView({ clientId, className }) {
 
       <form onSubmit={submit} className="flex items-end gap-2 border-t border-ink-600 p-3">
         <textarea
+          name="messages_textarea"
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
           onKeyDown={(event) => {
@@ -430,6 +356,7 @@ export function ThreadView({ clientId, className }) {
         />
 
         <input
+          name="messages_file"
           ref={fileRef}
           type="file"
           accept="image/jpeg,image/png,image/webp"

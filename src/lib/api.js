@@ -107,6 +107,10 @@ export const api = {
   nutrition: {
     plans: (clientId) => get(`/admin/clients/${clientId}/meal-plans`),
     create: (clientId, body) => post(`/admin/clients/${clientId}/meal-plans`, body),
+    // Build a 7-day plan from the client's height, weight, age, training days
+    // and goal — the same generator new clients get automatically on purchase.
+    generate: (clientId, activate = true) =>
+      post(`/admin/clients/${clientId}/meal-plans/auto`, { activate }),
     replace: (planId, body) => put(`/admin/meal-plans/${planId}`, body),
     activate: (planId) => post(`/admin/meal-plans/${planId}/activate`),
     remove: (planId) => del(`/admin/meal-plans/${planId}`),

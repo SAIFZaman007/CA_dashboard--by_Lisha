@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Dumbbell, ExternalLink, Pencil, Plus, Search, Trash2 } from 'lucide-react'
+import { Dumbbell, ExternalLink, Pencil, Plus, RefreshCw, Search, Trash2, X } from 'lucide-react'
 
 import { api, errorMessage } from '@/lib/api'
 import { keys } from '@/lib/queryClient'
@@ -14,22 +14,31 @@ import { Input, ListInput, Select, Textarea } from '@/components/ui/Field'
 import { ConfirmDialog, Modal } from '@/components/ui/Modal'
 import { toast } from '@/components/ui/Toast'
 
-const EQUIPMENT = [
-  'barbell',
-  'dumbbell',
-  'machine',
-  'cable',
-  'bodyweight',
-  'kettlebell',
-  'band',
-  'other',
-]
+/**
+ * Both browse axes — muscle group and equipment — come from
+ * `/exercises/filters`, which also returns how many movements sit under each.
+ * The lists used to be hard-coded here (eight equipment types, no muscle
+ * group at all), so every piece of equipment the library gained on the server
+ * was invisible in the dashboard. Reading them from the API keeps the two in
+ * lock-step and lets each option show its count.
+ */
+function useFacets() {
+  return useQuery({
+    queryKey: ['exercises', 'filters'],
+    queryFn: api.exercises.filters,
+    staleTime: 5 * 60_000,
+  })
+}
+
+const FILTER_CLASS =
+  'rounded-md border border-ink-600 bg-ink-900 px-3 py-2 text-sm text-white focus:border-brand-500 focus:outline-none'
 
 const BLANK = {
   name: '',
   target_muscle: '',
+  muscle_group: '',
   secondary_muscles: [],
-  equipment: 'other',
+  equipment: 'bodyweight',
   video_url: '',
   instructions: '',
   coaching_cue: '',
@@ -39,6 +48,7 @@ const BLANK = {
 function ExerciseForm({ open, exercise, onClose }) {
   const queryClient = useQueryClient()
   const editing = Boolean(exercise)
+  const { data: facets } = useFacets()
   const [form, setForm] = useState(
     exercise
       ? {
@@ -66,13 +76,18 @@ function ExerciseForm({ open, exercise, onClose }) {
 
   function submit() {
     setError(null)
+    // Both are required by the API; say so here rather than surface a 422.
+    if (!form.muscle_group) return setError('Choose the muscle group this movement trains.')
+    if (!form.video_url.trim()) {
+      return setError('Add a demonstration video link — clients see it on their workout screen.')
+    }
     save.mutate({
       name: form.name,
+      muscle_group: form.muscle_group,
       target_muscle: form.target_muscle,
       secondary_muscles: (form.secondary_muscles ?? []).map((m) => m.trim()).filter(Boolean),
       equipment: form.equipment,
-      // The API validates these as URLs, so an empty string must become null.
-      video_url: form.video_url || null,
+      video_url: form.video_url.trim(),
       instructions: form.instructions || null,
       coaching_cue: form.coaching_cue || null,
       min_level: form.min_level,
@@ -97,24 +112,44 @@ function ExerciseForm({ open, exercise, onClose }) {
       }
     >
       <div className="space-y-4">
-        <Input label="Name" required value={form.name} onChange={set('name')} placeholder="Barbell back squat" />
+        <Input label="Name" name="name" required value={form.name} onChange={set('name')} placeholder="Barbell back squat" />
 
         <div className="grid gap-4 sm:grid-cols-2">
+          <Select
+            label="Muscle group"
+            name="muscle_group"
+            required
+            value={form.muscle_group}
+            onChange={set('muscle_group')}
+          >
+            <option value="" disabled>
+              Choose…
+            </option>
+            {(facets?.muscle_groups ?? []).map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </Select>
           <Input
             label="Target muscle"
+            name="target_muscle"
             required
             value={form.target_muscle}
             onChange={set('target_muscle')}
             placeholder="Quads"
           />
-          <Select label="Equipment" value={form.equipment} onChange={set('equipment')}>
-            {EQUIPMENT.map((value) => (
-              <option key={value} value={value}>
-                {titleCase(value)}
-              </option>
-            ))}
-          </Select>
         </div>
+
+        <Select label="Equipment" name="equipment" value={form.equipment} onChange={set('equipment')}>
+          {(facets?.equipment ?? [{ value: form.equipment, label: titleCase(form.equipment) }]).map(
+            (option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ),
+          )}
+        </Select>
 
         <ListInput
           label="Secondary muscles"
@@ -123,7 +158,7 @@ function ExerciseForm({ open, exercise, onClose }) {
           placeholder="Glutes"
         />
 
-        <Select label="Minimum level" value={form.min_level} onChange={set('min_level')}>
+        <Select label="Minimum level" name="min_level" value={form.min_level} onChange={set('min_level')}>
           <option value="level_1">Level 1 and up</option>
           <option value="level_2">Level 2 and up</option>
           <option value="level_3">Level 3 only</option>
@@ -131,14 +166,18 @@ function ExerciseForm({ open, exercise, onClose }) {
 
         <Input
           label="Demonstration video"
+          name="video_url"
+          type="url"
+          required
           value={form.video_url}
           onChange={set('video_url')}
-          placeholder="https://www.youtube.com/watch?v=…"
-          hint="Optional. For a full lesson with notes, add it under Video Tutorials instead."
+          placeholder="https://www.muscleandstrength.com/exercises/…"
+          hint="A Muscle & Strength, MuscleWiki or YouTube link. For a full lesson with notes, add it under Video Tutorials instead."
         />
 
         <Input
           label="Coaching cue"
+          name="coaching_cue"
           value={form.coaching_cue}
           onChange={set('coaching_cue')}
           placeholder="Chest tall, knees tracking over the toes"
@@ -147,6 +186,7 @@ function ExerciseForm({ open, exercise, onClose }) {
 
         <Textarea
           label="Instructions"
+          name="instructions"
           rows={4}
           value={form.instructions}
           onChange={set('instructions')}
@@ -168,6 +208,7 @@ export default function ExercisesPage() {
   const [search, setSearch] = useState('')
   const [debounced, setDebounced] = useState('')
   const [equipment, setEquipment] = useState('')
+  const [muscleGroup, setMuscleGroup] = useState('')
   const [editing, setEditing] = useState(null)
   const [removing, setRemoving] = useState(null)
 
@@ -178,16 +219,40 @@ export default function ExercisesPage() {
 
   const params = useMemo(
     () => ({
-      limit: 300,
+      // The whole library fits in one response (~650 movements), so filters
+      // and search work over everything rather than over the first page.
+      limit: 1000,
       ...(debounced && { search: debounced }),
+      ...(muscleGroup && { muscle_group: muscleGroup }),
       ...(equipment && { equipment }),
     }),
-    [debounced, equipment],
+    [debounced, muscleGroup, equipment],
   )
+  const filtered = Boolean(debounced || muscleGroup || equipment)
+
+  const { data: facets } = useFacets()
+  const labelFor = useMemo(() => {
+    const map = new Map()
+    for (const option of [...(facets?.muscle_groups ?? []), ...(facets?.equipment ?? [])]) {
+      map.set(option.value, option.label)
+    }
+    return (value) => map.get(value) ?? titleCase(value)
+  }, [facets])
 
   const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: keys.exercises(params),
     queryFn: () => api.exercises.list(params),
+  })
+
+  const sync = useMutation({
+    mutationFn: () => api.exercises.sync(false),
+    onSuccess: (report) => {
+      queryClient.invalidateQueries({ queryKey: ['exercises'] })
+      toast.success(
+        `Library synced: ${report.created} added, ${report.repaired_links} video links repaired.`,
+      )
+    },
+    onError: (failure) => toast.error(errorMessage(failure)),
   })
 
   const retire = useMutation({
@@ -216,12 +281,17 @@ export default function ExercisesPage() {
     {
       key: 'muscle',
       header: 'Target',
-      render: (row) => <span className="capitalize text-chalk-200">{row.target_muscle}</span>,
+      render: (row) => (
+        <div className="min-w-0">
+          <p className="truncate text-chalk-200">{labelFor(row.muscle_group)}</p>
+          <p className="truncate text-xs capitalize text-chalk-500">{row.target_muscle}</p>
+        </div>
+      ),
     },
     {
       key: 'equipment',
       header: 'Equipment',
-      render: (row) => <Badge>{titleCase(row.equipment)}</Badge>,
+      render: (row) => <Badge>{labelFor(row.equipment)}</Badge>,
     },
     {
       key: 'level',
@@ -239,7 +309,7 @@ export default function ExercisesPage() {
           <a
             href={row.video_url}
             target="_blank"
-            rel="noreferrer"
+            rel="noopener noreferrer"
             onClick={(event) => event.stopPropagation()}
             aria-label={`Open the demonstration video for ${row.name}`}
             className="inline-flex text-chalk-400 transition hover:text-brand-400"
@@ -281,14 +351,32 @@ export default function ExercisesPage() {
   return (
     <>
       <PageHeader
-        eyebrow={data ? `${data.length} movements` : 'Library'}
+        eyebrow={
+          data
+            ? filtered
+              ? `${data.length} of ${facets?.total ?? data.length} movements`
+              : `${data.length} movements`
+            : 'Library'
+        }
         title="Exercise Library"
         description="Every movement a training plan can prescribe."
         action={
-          <Button size="sm" onClick={() => setEditing('new')}>
-            <Plus className="size-4" aria-hidden="true" />
-            Add movement
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant="subtle"
+              loading={sync.isPending}
+              onClick={() => sync.mutate()}
+              title="Add any new movements from the shipped library and repair its video links. Links you edited are never touched."
+            >
+              {!sync.isPending && <RefreshCw className="size-4" aria-hidden="true" />}
+              Sync library
+            </Button>
+            <Button size="sm" onClick={() => setEditing('new')}>
+              <Plus className="size-4" aria-hidden="true" />
+              Add movement
+            </Button>
+          </div>
         }
       />
 
@@ -301,6 +389,7 @@ export default function ExercisesPage() {
             />
             <input
               type="search"
+              name="exercise_search"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search movements"
@@ -309,18 +398,51 @@ export default function ExercisesPage() {
             />
           </div>
           <select
+            name="muscle_group_filter"
+            value={muscleGroup}
+            onChange={(event) => setMuscleGroup(event.target.value)}
+            aria-label="Filter by muscle group"
+            className={FILTER_CLASS}
+          >
+            <option value="">All muscle groups</option>
+            {(facets?.muscle_groups ?? [])
+              .filter((option) => option.count > 0)
+              .map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label} ({option.count})
+                </option>
+              ))}
+          </select>
+          <select
+            name="equipment_filter"
             value={equipment}
             onChange={(event) => setEquipment(event.target.value)}
             aria-label="Filter by equipment"
-            className="rounded-md border border-ink-600 bg-ink-900 px-3 py-2 text-sm text-white focus:border-brand-500 focus:outline-none"
+            className={FILTER_CLASS}
           >
             <option value="">All equipment</option>
-            {EQUIPMENT.map((value) => (
-              <option key={value} value={value}>
-                {titleCase(value)}
-              </option>
-            ))}
+            {(facets?.equipment ?? [])
+              .filter((option) => option.count > 0)
+              .map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label} ({option.count})
+                </option>
+              ))}
           </select>
+          {filtered && (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                setSearch('')
+                setMuscleGroup('')
+                setEquipment('')
+              }}
+            >
+              <X className="size-4" aria-hidden="true" />
+              Clear
+            </Button>
+          )}
         </div>
 
         {isError ? (
@@ -334,22 +456,22 @@ export default function ExercisesPage() {
             mobile={(row) => (
               <div>
                 <p className="text-sm font-medium text-chalk-50">{row.name}</p>
-                <p className="mt-0.5 text-xs capitalize text-chalk-500">
-                  {row.target_muscle} · {titleCase(row.equipment)}
+                <p className="mt-0.5 text-xs text-chalk-500">
+                  {labelFor(row.muscle_group)} · {labelFor(row.equipment)}
                 </p>
               </div>
             )}
             empty={
               <EmptyState
                 icon={Dumbbell}
-                title={debounced ? 'Nothing matches that' : 'The library is empty'}
+                title={filtered ? 'Nothing matches that' : 'The library is empty'}
                 description={
-                  debounced
-                    ? 'Try a different name or muscle group.'
+                  filtered
+                    ? 'Try a different name, muscle group or piece of equipment.'
                     : 'Add the movements you program with. Plans are built from this list.'
                 }
                 action={
-                  !debounced ? (
+                  !filtered ? (
                     <Button size="sm" onClick={() => setEditing('new')}>
                       Add the first movement
                     </Button>
