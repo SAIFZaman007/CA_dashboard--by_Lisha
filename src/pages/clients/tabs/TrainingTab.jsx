@@ -97,6 +97,7 @@ function ExercisePicker({ open, onClose, onPick }) {
             aria-hidden="true"
           />
           <input
+            name="training_search"
             type="search"
             value={search}
             onChange={(event) => setSearch(event.target.value)}

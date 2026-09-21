@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Apple, Plus, Trash2 } from 'lucide-react'
+import { Apple, Plus, Sparkles, Trash2 } from 'lucide-react'
 
 import { api, errorMessage } from '@/lib/api'
 import { keys } from '@/lib/queryClient'
@@ -363,6 +363,18 @@ export function NutritionTab({ clientId, detail }) {
     onError: (failure) => toast.error(errorMessage(failure)),
   })
 
+  // Manual and automatic side by side: the coach can write a plan by hand, or
+  // have one built from the client's numbers and then edit it. Editing an
+  // automatic plan makes it hers — it is never regenerated underneath her.
+  const generate = useMutation({
+    mutationFn: () => api.nutrition.generate(clientId, true),
+    onSuccess: () => {
+      invalidate()
+      toast.success('Automatic meal plan built and made live')
+    },
+    onError: (failure) => toast.error(errorMessage(failure)),
+  })
+
   const remove = useMutation({
     mutationFn: (planId) => api.nutrition.remove(planId),
     onSuccess: () => {
@@ -386,12 +398,24 @@ export function NutritionTab({ clientId, detail }) {
       <Card>
         <CardHeader
           title="Meal plans"
-          description="One plan is live at a time. Targets default to whatever is on their profile."
+          description="One plan is live at a time. New clients get an automatic plan when they subscribe; write your own or generate a fresh one any time."
           action={
-            <Button size="sm" onClick={() => setEditing('new')}>
-              <Plus className="size-4" aria-hidden="true" />
-              New meal plan
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant="subtle"
+                loading={generate.isPending}
+                onClick={() => generate.mutate()}
+                title="Build a 7-day plan from their height, weight, age, training days and goal"
+              >
+                {!generate.isPending && <Sparkles className="size-4" aria-hidden="true" />}
+                Generate automatically
+              </Button>
+              <Button size="sm" onClick={() => setEditing('new')}>
+                <Plus className="size-4" aria-hidden="true" />
+                New meal plan
+              </Button>
+            </div>
           }
         />
 
@@ -417,6 +441,11 @@ export function NutritionTab({ clientId, detail }) {
                       <Badge tone="neutral" className="capitalize">
                         {plan.phase}
                       </Badge>
+                      {plan.source === 'auto' ? (
+                        <Badge tone="blue">Automatic</Badge>
+                      ) : (
+                        <Badge tone="neutral">Written by coach</Badge>
+                      )}
                     </div>
                     <p className="mt-1 text-xs tabular-nums text-chalk-500">
                       {plan.calorie_target} kcal · P {plan.protein_target_g} · C{' '}
@@ -454,11 +483,17 @@ export function NutritionTab({ clientId, detail }) {
           <EmptyState
             icon={Apple}
             title="No meal plan assigned"
-            description="Write the week once and it appears on their meal plan page, day by day, with tick-box tracking."
+            description="Generate one from their height, weight and goal, or write the week yourself. It appears on their meal plan page, day by day, with tick-box tracking."
             action={
-              <Button size="sm" onClick={() => setEditing('new')}>
-                Write a meal plan
-              </Button>
+              <div className="flex flex-wrap justify-center gap-2">
+                <Button size="sm" loading={generate.isPending} onClick={() => generate.mutate()}>
+                  {!generate.isPending && <Sparkles className="size-4" aria-hidden="true" />}
+                  Generate automatically
+                </Button>
+                <Button size="sm" variant="subtle" onClick={() => setEditing('new')}>
+                  Write a meal plan
+                </Button>
+              </div>
             }
           />
         )}
