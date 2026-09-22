@@ -16,7 +16,7 @@ RUN npm ci
 COPY . .
 
 ARG VITE_API_URL=""
-ARG VITE_DASHBOARD_URL="https://coach.autonomyfitness.press"
+ARG VITE_DASHBOARD_URL=""
 ARG VITE_PORTAL_URL="https://autonomyfitness.press"
 ARG VITE_ENVIRONMENT="production"
 ENV VITE_API_URL=$VITE_API_URL \
