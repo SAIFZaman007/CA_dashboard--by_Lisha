@@ -1,18 +1,5 @@
 import axios from 'axios'
 
-/**
- * Resolve the API base URL once, safely.
- *
- * `VITE_API_URL` is optional. Blank (the default in every .env file) means the
- * API is served from the same origin under `/api/v1` — the Vite dev proxy
- * locally, nginx in production. It may also hold a full base
- * (`https://api.example.com/api/v1`) or just an origin
- * (`http://localhost:8000`), and `/api/v1` is appended when missing.
- *
- * `??` is not enough here: Vite turns `VITE_API_URL=` into an empty string,
- * which `??` keeps, so every request went to `/programs` instead of
- * `/api/v1/programs` and 404'd.
- */
 function resolveApiBase(raw) {
   const value = String(raw ?? '').trim().replace(/\/+$/, '')
   if (!value) return '/api/v1'
@@ -122,6 +109,11 @@ export const api = {
     replace: (planId, body) => put(`/admin/plans/${planId}`, body),
     activate: (planId) => post(`/admin/plans/${planId}/activate`),
     duplicate: (planId) => post(`/admin/plans/${planId}/duplicate`),
+    // Build a block from the client's training intake — the same generator
+    // they get automatically once they have filled the form in. Creates a new
+    // plan; nothing already written is touched.
+    generate: (clientId, activate = true) =>
+      post(`/admin/clients/${clientId}/plans/auto`, { activate }),
     remove: (planId) => del(`/admin/plans/${planId}`),
   },
 

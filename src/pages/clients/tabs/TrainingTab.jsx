@@ -6,6 +6,7 @@ import {
   Dumbbell,
   Plus,
   Search,
+  Sparkles,
   Trash2,
   Video,
 } from 'lucide-react'
@@ -661,6 +662,18 @@ export function TrainingTab({ clientId }) {
     onError: (failure) => toast.error(errorMessage(failure)),
   })
 
+  // Manual and automatic, side by side. The coach can write a block by hand or
+  // have one built from the client's intake and then edit it — editing makes
+  // it hers, and an automatic rebuild never touches a block she has written.
+  const generate = useMutation({
+    mutationFn: () => api.training.generate(clientId, true),
+    onSuccess: () => {
+      invalidate()
+      toast.success('Automatic block built from their intake and made live')
+    },
+    onError: (failure) => toast.error(errorMessage(failure)),
+  })
+
   const remove = useMutation({
     mutationFn: (planId) => api.training.remove(planId),
     onSuccess: () => {
@@ -705,12 +718,24 @@ export function TrainingTab({ clientId }) {
       <Card>
         <CardHeader
           title="Training blocks"
-          description="One block is live at a time — that is the one their portal shows."
+          description="One block is live at a time — that is the one their portal shows. Clients get an automatic block from their intake; write your own or generate a fresh one any time."
           action={
-            <Button size="sm" onClick={() => setEditing('new')}>
-              <Plus className="size-4" aria-hidden="true" />
-              New block
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant="subtle"
+                loading={generate.isPending}
+                onClick={() => generate.mutate()}
+                title="Build a block from their goal, equipment, days per week and session length"
+              >
+                {!generate.isPending && <Sparkles className="size-4" aria-hidden="true" />}
+                Generate automatically
+              </Button>
+              <Button size="sm" onClick={() => setEditing('new')}>
+                <Plus className="size-4" aria-hidden="true" />
+                New block
+              </Button>
+            </div>
           }
         />
 
@@ -734,6 +759,7 @@ export function TrainingTab({ clientId }) {
                         <Badge tone="grey">Draft</Badge>
                       )}
                       {plan.is_custom && <Badge tone="blue">Built by client</Badge>}
+                      {plan.source === 'auto' && <Badge tone="grey">Automatic</Badge>}
                     </div>
                     <p className="mt-1 text-xs tabular-nums text-chalk-500">
                       Week {plan.week_number} of {plan.total_weeks} · {plan.days.length} days ·{' '}
