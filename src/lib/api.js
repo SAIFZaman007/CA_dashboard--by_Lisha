@@ -40,7 +40,14 @@ http.interceptors.response.use(
   async (error) => {
     const original = error.config
     const status = error.response?.status
-    const isAuthRoute = original?.url?.includes('/auth/')
+    // Only the routes that ARE the session machinery skip the silent refresh:
+    // retrying them would loop (refresh) or hide a real answer (login).
+    // Signed-in account actions such as /auth/change-password and /auth/me
+    // are ordinary authenticated calls — an access token that expired while
+    // the coach was typing must be renewed, not reported as a failure.
+    const isAuthRoute = /\/auth\/(login|refresh|logout|forgot-password|reset-password)(\?|$)/.test(
+      original?.url ?? '',
+    )
 
     if (status === 401 && !original?._retried && !isAuthRoute) {
       original._retried = true
@@ -87,6 +94,13 @@ export const api = {
     me: () => get('/auth/me'),
     changePassword: (body) => post('/auth/change-password', body),
     forgotPassword: (body) => post('/auth/forgot-password', body),
+  },
+
+  // The signed-in account itself (name fields). Password changes live under
+  // auth.changePassword because they also manage sessions.
+  users: {
+    me: () => get('/users/me'),
+    updateMe: (body) => patch('/users/me', body),
   },
 
   overview: (days = 30) => get('/admin/overview', { days }),

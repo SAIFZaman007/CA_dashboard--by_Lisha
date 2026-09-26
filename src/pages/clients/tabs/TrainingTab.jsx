@@ -41,19 +41,6 @@ const BLANK_PLAN = () => ({
 
 const DAY_NAMES = ['Day A', 'Day B', 'Day C', 'Day D', 'Day E', 'Day F', 'Day G']
 
-/**
- * Picks a movement out of the shared exercise library.
- *
- * Two axes, because those are the two questions a coach actually asks: "what
- * can I give them for chest" and "what can they do with only dumbbells". Both
- * filters come from `/exercises/filters`, which returns counts alongside the
- * headings — a coach who can see that Palmar Fascia holds four movements and
- * Chest holds eighteen does not click into the one that lands nowhere.
- *
- * Every row shows whether the movement carries a demonstration video, because
- * the API refuses to save a block containing one that does not. Surfacing that
- * at the point of choosing beats a 422 after fourteen days of work.
- */
 function ExercisePicker({ open, onClose, onPick }) {
   const [search, setSearch] = useState('')
   const [debounced, setDebounced] = useState('')
@@ -69,8 +56,6 @@ function ExercisePicker({ open, onClose, onPick }) {
     queryKey: keys.exerciseFilters,
     queryFn: api.exercises.filters,
     enabled: open,
-    // The library changes a few times a month at most, so this can sit in
-    // cache far longer than the default and save a request per picker open.
     staleTime: 10 * 60_000,
   })
 
@@ -203,18 +188,6 @@ function ExercisePicker({ open, onClose, onPick }) {
   )
 }
 
-/**
- * Builds one training block.
- *
- * The whole block is edited as a document and saved once, because that is how a
- * coach thinks about it: shuffle a day, change three rep ranges, then commit.
- * The API replaces the nested structure in a single transaction, so a client
- * can never open a half-written programme.
- *
- * This component is mounted only while the editor is open, which is what keeps
- * each edit starting from a clean draft — no effect resetting state after the
- * fact, no stale plan flashing up on second open.
- */
 function PlanEditor({ onClose, clientId, plan }) {
   const queryClient = useQueryClient()
   const [draft, setDraft] = useState(plan ?? BLANK_PLAN())
@@ -255,8 +228,6 @@ function PlanEditor({ onClose, clientId, plan }) {
         estimated_minutes: Number(day.estimated_minutes) || 55,
         exercises: day.exercises.map((item) => ({
           exercise_id: item.exercise_id,
-          // Only sent when the coach typed one. An empty string would fail
-          // URL validation on the way in; null means "use the library's".
           video_url: item.video_url?.trim() ? item.video_url.trim() : null,
           sets: Number(item.sets) || 3,
           rep_range: item.rep_range || '8-12',
@@ -270,9 +241,6 @@ function PlanEditor({ onClose, clientId, plan }) {
     [draft],
   )
 
-  // Mirrors the server's rule so the coach sees the problem while they can
-  // still fix it in place. The server is still the authority — this is a
-  // courtesy, not the enforcement.
   const missingVideo = useMemo(
     () =>
       draft.days.flatMap((day) =>

@@ -1,6 +1,7 @@
 import { useState } from 'react'
+import { Link } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Archive, Check, GripVertical, Pencil, Plus, Tags, Trash2 } from 'lucide-react'
+import { Archive, Check, Pencil, Plus, Tags, Trash2, Users } from 'lucide-react'
 
 import { api, errorMessage } from '@/lib/api'
 import { keys } from '@/lib/queryClient'
@@ -250,6 +251,37 @@ function PlanForm({ open, plan, onClose }) {
   )
 }
 
+/**
+ * Live count of active clients on this tier, linking to exactly those people.
+ *
+ * Counted server-side (app/services/roster.py): a live subscription to this
+ * plan, or — for clients the coach onboarded by hand — the level this plan
+ * sells. Always shown, including zero, so an empty tier reads as empty rather
+ * than as "no data".
+ */
+function ClientCountBadge({ plan }) {
+  const count = plan.client_count ?? 0
+  const label = `${count} active client${count === 1 ? '' : 's'}`
+
+  return (
+    <Link
+      to={`/clients?level=${plan.level}&status=active`}
+      title={`See the ${label} on ${LEVEL_LABELS[plan.level] ?? 'this level'}`}
+      aria-label={`${label} — open the client list`}
+      className="rounded focus-visible:outline-2 focus-visible:outline-brand-500"
+    >
+      <Badge
+        tone={count > 0 ? 'blue' : 'grey'}
+        className="transition-colors hover:border-signal-blue/70"
+      >
+        <Users className="size-3" aria-hidden="true" />
+        <span className="tabular-nums">{count}</span>
+        {count === 1 ? 'client' : 'clients'}
+      </Badge>
+    </Link>
+  )
+}
+
 function PlanCard({ plan, onEdit, onArchive, onDelete }) {
   return (
     <Card
@@ -318,11 +350,7 @@ function PlanCard({ plan, onEdit, onArchive, onDelete }) {
         <Badge tone={plan.is_accepting_clients ? 'green' : 'amber'}>
           {plan.is_accepting_clients ? 'Open' : 'Full'}
         </Badge>
-        {plan.client_count > 0 && (
-          <Badge tone="blue">
-            {plan.client_count} client{plan.client_count === 1 ? '' : 's'}
-          </Badge>
-        )}
+        <ClientCountBadge plan={plan} />
       </div>
     </Card>
   )
@@ -338,6 +366,13 @@ export default function PlansPage() {
   const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: keys.programs,
     queryFn: api.programs.list,
+    // Client counts change on other screens (a level assigned, an account
+    // switched off, a subscription started by the webhook). Opening this page
+    // always asks the server again instead of trusting a cached number, and a
+    // slow background poll keeps an open tab honest.
+    refetchOnMount: 'always',
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: false,
   })
 
   const archive = useMutation({
@@ -440,7 +475,7 @@ export default function PlansPage() {
         onTypedChange={setTyped}
         message={
           removing?.client_count
-            ? `${removing.client_count} client(s) are still on this plan. The server will refuse a delete — archive it instead, or move them across first.`
+            ? `${removing.client_count} active client${removing.client_count === 1 ? ' is' : 's are'} still on this plan. The server will refuse a delete — archive it instead, or move them across first.`
             : 'This removes the plan permanently. Archiving hides it from the public site and can be undone; deleting cannot.'
         }
       />

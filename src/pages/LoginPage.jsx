@@ -8,6 +8,13 @@ import { Logo } from '@/components/layout/Logo'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Field'
 
+// Password resets are one flow for every account type: the email link opens
+// the portal's reset screen, which works for coach and admin accounts too.
+const PORTAL_URL = (import.meta.env.VITE_PORTAL_URL || 'https://autonomyfitness.press').replace(
+  /\/+$/,
+  '',
+)
+
 export default function LoginPage() {
   const login = useAuth((s) => s.login)
   const navigate = useNavigate()
@@ -82,6 +89,15 @@ export default function LoginPage() {
           <Button type="submit" fullWidth loading={busy} disabled={!email || !password}>
             Sign in
           </Button>
+
+          <p className="text-center text-xs">
+            <a
+              href={`${PORTAL_URL}/forgot-password`}
+              className="font-medium text-chalk-400 transition hover:text-white"
+            >
+              Forgot your password?
+            </a>
+          </p>
 
           <p className="flex items-start gap-2 pt-1 text-xs leading-relaxed text-chalk-500">
             <ShieldCheck className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />

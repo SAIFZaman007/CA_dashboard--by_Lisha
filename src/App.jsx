@@ -19,6 +19,7 @@ const TutorialsPage = lazyWithRetry(() => import('@/pages/TutorialsPage'))
 const ExercisesPage = lazyWithRetry(() => import('@/pages/ExercisesPage'))
 const GalleryPage = lazyWithRetry(() => import('@/pages/GalleryPage'))
 const PlansPage = lazyWithRetry(() => import('@/pages/PlansPage'))
+const SettingsPage = lazyWithRetry(() => import('@/pages/SettingsPage'))
 const NotFound = lazyWithRetry(() => import('@/pages/NotFound'))
 
 function ScrollToTop() {
@@ -110,6 +111,7 @@ export default function App() {
                 <Route path="exercises" element={<ExercisesPage />} />
                 <Route path="gallery" element={<GalleryPage />} />
                 <Route path="plans" element={<PlansPage />} />
+                <Route path="settings" element={<SettingsPage />} />
                 <Route path="*" element={<NotFound />} />
               </Route>
             </Route>

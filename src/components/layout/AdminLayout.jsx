@@ -10,6 +10,7 @@ import {
   Menu,
   MessageSquare,
   PlayCircle,
+  Settings,
   Tags,
   UserPlus,
   Users,
@@ -62,6 +63,10 @@ const SECTIONS = [
     heading: 'Business',
     items: [{ to: '/plans', label: 'Pricing Plans', icon: Tags }],
   },
+  {
+    heading: 'Account',
+    items: [{ to: '/settings', label: 'Settings', icon: Settings }],
+  },
 ]
 
 const PORTAL_URL = import.meta.env.VITE_PORTAL_URL || 'https://autonomyfitness.press'
@@ -99,7 +104,7 @@ function NavItems({ counts, onNavigate }) {
   )
 }
 
-function AccountCard() {
+function AccountCard({ onNavigate }) {
   const user = useAuth((s) => s.user)
   const logout = useAuth((s) => s.logout)
   const name = user?.display_name || user?.full_name || 'Coach'
@@ -122,7 +127,14 @@ function AccountCard() {
         Open client portal
       </a>
 
-      <div className="flex items-center gap-2.5 rounded-lg bg-ink-800 px-3 py-2">
+      {/* The account chip is the conventional place to look for "my account",
+          so it opens Settings as well as the nav item above does. */}
+      <NavLink
+        to="/settings"
+        onClick={onNavigate}
+        title="Account settings"
+        className="group flex items-center gap-2.5 rounded-lg bg-ink-800 px-3 py-2 transition hover:bg-ink-700 aria-[current=page]:ring-1 aria-[current=page]:ring-brand-500/60"
+      >
         <span className="grid size-8 shrink-0 place-items-center rounded-full bg-brand-500 text-xs font-bold text-white">
           {initials(name)}
         </span>
@@ -130,7 +142,12 @@ function AccountCard() {
           <span className="block truncate text-sm font-semibold text-chalk-50">{name}</span>
           <span className="block text-[11px] capitalize text-chalk-500">{user?.role}</span>
         </span>
-      </div>
+        <Settings
+          className="size-4 shrink-0 text-chalk-500 transition group-hover:rotate-45 group-hover:text-white"
+          aria-hidden="true"
+        />
+        <span className="sr-only">Open account settings</span>
+      </NavLink>
 
       <button
         type="button"
@@ -227,7 +244,7 @@ export function AdminLayout() {
               </button>
             </div>
             <NavItems counts={counts} onNavigate={() => setMenuOpen(false)} />
-            <AccountCard />
+            <AccountCard onNavigate={() => setMenuOpen(false)} />
           </div>
         </>
       )}
